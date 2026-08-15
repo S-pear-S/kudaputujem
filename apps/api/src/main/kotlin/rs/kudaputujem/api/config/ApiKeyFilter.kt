@@ -12,14 +12,14 @@ import org.springframework.http.MediaType
 import org.springframework.web.filter.OncePerRequestFilter
 
 /**
- * Zastita `/internal/**` i `/admin/**` API kljucem iz zaglavlja `X-Api-Key`.
+ * Zastita /internal/ i /admin/ API kljucem iz zaglavlja X-Api-Key.
  *
  * Namerno nije Spring Security: jedini zahtev je "dva staticka kljuca, dve zone".
  * Spring Security bi ovde doneo pet klasa konfiguracije da bi radio isto.
  * Kad dodamo korisnicke naloge, prelazimo na Spring Security i ovaj filter nestaje.
  *
- * Poredjenje kljuceva ide preko `MessageDigest.isEqual`, sto je konstantno u vremenu —
- * obicno `==` na stringu curi informaciju o tome koliko se prvih karaktera poklapa.
+ * Poredjenje kljuceva ide preko MessageDigest.isEqual, sto je konstantno u vremenu.
+ * Obicno poredjenje stringa curi informaciju o tome koliko se prvih karaktera poklapa.
  */
 @Configuration
 class ApiKeyFilterConfig {

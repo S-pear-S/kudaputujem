@@ -20,11 +20,11 @@ data class ApiProperties(
     val cors: Cors = Cors(),
 ) {
     data class Security(
-        /** Kljuc kojim se skreperi autentikuju ka /internal/**. */
+        // Kljuc kojim se skreperi autentikuju ka /internal/.
         @field:NotBlank val ingestApiKey: String = "dev-ingest-key",
-        /** Kljuc za /admin/**. Namerno odvojen: skreper koji procuri ne sme da brise agencije. */
+        // Kljuc za /admin/. Namerno odvojen: skreper koji procuri ne sme da brise agencije.
         @field:NotBlank val adminApiKey: String = "dev-admin-key",
-        /** So za hesiranje IP adrese u lead tabeli. Menja se u produkciji. */
+        // So za hesiranje IP adrese u lead tabeli. Menja se u produkciji.
         @field:NotBlank val ipHashSalt: String = "dev-salt",
     )
 

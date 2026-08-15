@@ -328,7 +328,7 @@ class OccupancySolver {
     }
 
     /** Nabraja sve kombinacije broja dece po uzrasnoj klasi koje staju u [freeSlots]. */
-    private inline fun forEachChildCombination(
+    private fun forEachChildCombination(
         counts: List<Int>,
         freeSlots: Int,
         action: (IntArray) -> Unit,
