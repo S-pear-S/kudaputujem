@@ -4,7 +4,7 @@
 > Ako nešto u kodu protivreči ovom fajlu, prvo pitaj — ne pretpostavljaj da je fajl zastareo.
 > Kad doneseš novu odluku ili završiš veću stavku, **ažuriraj ovaj fajl u istom commit-u**.
 
-Poslednje ažuriranje: 15.08.2026.
+Poslednje ažuriranje: 15.08.2026. (build fix)
 Repo: `https://github.com/S-pear-S/kudaputujem` · grana `main`
 
 ---
@@ -219,11 +219,14 @@ generiše migraciju `V2__seed_geo.sql`. **Novi alias se dodaje u YAML, ne ručno
 | Sav SQL iz Kotlin koda | ~20 naredbi ručno puštenih na pravom Postgresu, sve prolaze |
 | Logika `OccupancySolver`-a | verifikovana nezavisnim Python prototipom na 11 slučajeva pre pisanja Kotlina |
 
-### Napisano ali NIKAD KOMPAJLIRANO
+### Kotlin — KOMPAJLIRA I STARTUJE ✓
 
-**Ceo Kotlin deo.** Pisan je u okruženju bez pristupa Maven Centralu, pa `gradlew build` nikad
-nije pokrenut. Očekuj greške kompajlera pri prvom buildu — verovatno import-i, `JdbcClient` API
-detalji i nullability.
+`./gradlew build` prolazi čisto. `./gradlew bootRun` starta API na `:8080`. Flyway automatski
+primenjuje V1 i V2 pri startu. Swagger UI dostupan na `/swagger-ui.html`.
+
+Popravke koje su bile potrebne pri prvom buildu:
+- Kotlin 2.1.0 parser bug: `/**` unutar KDoc bloka (`/internal/**`) zbuni parser; zamenjeno `//` komentarima
+- `inline fun forEachChildCombination` imao lokalnu funkciju `recurse` — nije dozvoljeno u Kotlinu; `inline` uklonjen
 
 Napisano: `ApiApplication`, config (ApiProperties, ApiKeyFilter, Web, Jackson, OpenApi),
 common (Errors, PageResponse, Text), `domain/Enums.kt`, `OccupancySolver` + 17 testova,
@@ -246,7 +249,7 @@ common (Errors, PageResponse, Text), `domain/Enums.kt`, `OccupancySolver` + 17 t
 
 ## 7. TODO, po redosledu
 
-1. **`./gradlew build` da prođe.** Popraviti greške kompajlera. Ništa dalje nema smisla dok ovo ne radi.
+1. ~~**`./gradlew build` da prođe.**~~ ✓ Urađeno 15.08.2026.
 2. **Search API** — `GET /api/search` sa parametrima: `productKind`, `destinationId`/`countryCode`,
    `dateFrom`, `dateTo`, `nights`, `adults`, `childAges`, `rooms`, `transportType`, `boardType`,
    `departureFrom`, `priceMax`, `stars`, `sortBy`, `page`. Filtrira preko `departure_price_index`,
@@ -307,8 +310,8 @@ common (Errors, PageResponse, Text), `domain/Enums.kt`, `OccupancySolver` + 17 t
 
 | Problem | Ozbiljnost | Napomena |
 |---|---|---|
-| Kotlin nikad kompajliran | visoka | prvi zadatak |
-| Nema Gradle wrappera | niska | `gradle wrapper` ili IntelliJ |
+| Kotlin kompajlira i startuje | ✓ rešeno | — |
+| Gradle wrapper | ✓ rešeno | — |
 | `AccommodationResolver.fuzzyHit` čita `stars` kao `BigDecimal` cast-om | srednja | proveriti da PostgreSQL driver vraća `BigDecimal` za `NUMERIC(2,1)`; ako ne, puca u runtime-u |
 | `PriceIndexBuilder.loadDepartures` koristi `Triple` sa ugnježdenim parom | niska | radi, ali je nečitko; kandidat za refaktor u data klasu |
 | Kursna lista ima hardkodovane rezervne vrednosti | srednja | EUR≈117.20 RSD; treba NBS sinhronizacija |
