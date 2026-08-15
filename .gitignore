@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Gradle / JVM
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+*.class
+
+# Okruženje
+.env
+.env.local
+*.local
+
+# Skreper keš i snapshotovi
+apps/scrapers/.cache/
+apps/scrapers/.playwright/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store

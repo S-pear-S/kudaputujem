@@ -1,0 +1,528 @@
+# Kanonska geografija za srpsko tržište.
+# Format:
+#   <country_code>:
+#     name_sr / name_en
+#     aliases: [...]            # sirova imena koja se sreću na sajtovima agencija
+#     children:                 # REGION / CITY / RESORT / ISLAND
+#       - name_sr, name_en, kind, aliases, children
+#
+# Ovo je izvor istine. `scripts/gen_geo_seed.py` iz njega generiše Flyway migraciju.
+# Novi alias se dodaje OVDE, ne ručno u bazu.
+
+RS:
+  name_sr: Srbija
+  name_en: Serbia
+  aliases: [srbija, serbia, domace destinacije, domaci turizam]
+  children:
+    - { name_sr: Beograd, name_en: Belgrade, kind: CITY, departure_hub: true, aliases: [beograd, belgrade, bg] }
+    - { name_sr: Novi Sad, name_en: Novi Sad, kind: CITY, departure_hub: true, aliases: [novi sad, ns] }
+    - { name_sr: Niš, name_en: Nis, kind: CITY, departure_hub: true, aliases: [nis, nis srbija] }
+    - { name_sr: Kragujevac, kind: CITY, departure_hub: true }
+    - { name_sr: Čačak, kind: CITY, departure_hub: true }
+    - { name_sr: Kraljevo, kind: CITY, departure_hub: true }
+    - { name_sr: Užice, kind: CITY, departure_hub: true }
+    - { name_sr: Subotica, kind: CITY, departure_hub: true }
+    - { name_sr: Zrenjanin, kind: CITY, departure_hub: true }
+    - { name_sr: Šabac, kind: CITY, departure_hub: true }
+    - { name_sr: Valjevo, kind: CITY, departure_hub: true }
+    - { name_sr: Jagodina, kind: CITY, departure_hub: true }
+    - { name_sr: Leskovac, kind: CITY, departure_hub: true }
+    - { name_sr: Vranje, kind: CITY, departure_hub: true }
+    - { name_sr: Kruševac, kind: CITY, departure_hub: true }
+    - { name_sr: Smederevo, kind: CITY, departure_hub: true }
+    - { name_sr: Požarevac, kind: CITY, departure_hub: true }
+    - { name_sr: Pančevo, kind: CITY, departure_hub: true }
+    - { name_sr: Sombor, kind: CITY, departure_hub: true }
+    - { name_sr: Loznica, kind: CITY, departure_hub: true }
+    - { name_sr: Novi Pazar, kind: CITY, departure_hub: true }
+    - { name_sr: Zaječar, kind: CITY, departure_hub: true }
+    - { name_sr: Pirot, kind: CITY, departure_hub: true }
+    - { name_sr: Sremska Mitrovica, kind: CITY, departure_hub: true }
+    - { name_sr: Zlatibor, kind: RESORT, aliases: [zlatibor, cajetina] }
+    - { name_sr: Kopaonik, kind: RESORT, ski: true, aliases: [kopaonik, kop] }
+    - { name_sr: Tara, kind: RESORT, aliases: [tara, mitrovac, kaluderske bare] }
+    - { name_sr: Divčibare, kind: RESORT }
+    - { name_sr: Stara Planina, kind: RESORT, ski: true, aliases: [stara planina, babin zub] }
+    - { name_sr: Zlatar, kind: RESORT, aliases: [zlatar, nova varos] }
+    - { name_sr: Golija, kind: RESORT }
+    - { name_sr: Mokra Gora, kind: RESORT, aliases: [mokra gora, drvengrad, mecavnik] }
+    - { name_sr: Vrnjačka Banja, kind: RESORT, aliases: [vrnjacka banja, vrnjci] }
+    - { name_sr: Sokobanja, kind: RESORT, aliases: [sokobanja, soko banja] }
+    - { name_sr: Banja Koviljača, kind: RESORT }
+    - { name_sr: Prolom Banja, kind: RESORT }
+    - { name_sr: Lukovska Banja, kind: RESORT }
+    - { name_sr: Niška Banja, kind: RESORT }
+    - { name_sr: Ribarska Banja, kind: RESORT }
+    - { name_sr: Gamzigradska Banja, kind: RESORT, aliases: [gamzigradska banja, gamzigrad] }
+    - { name_sr: Vrdnik, kind: RESORT, aliases: [vrdnik, banja vrdnik] }
+    - { name_sr: Palić, kind: RESORT }
+    - { name_sr: Sremski Karlovci, kind: CITY }
+    - { name_sr: Ivanjica, kind: RESORT }
+
+ME:
+  name_sr: Crna Gora
+  name_en: Montenegro
+  aliases: [crna gora, montenegro, cg]
+  children:
+    - { name_sr: Budva, kind: RESORT, aliases: [budva, budvanska rivijera] }
+    - { name_sr: Bečići, kind: RESORT, aliases: [becici, becici budva] }
+    - { name_sr: Rafailovići, kind: RESORT }
+    - { name_sr: Petrovac, kind: RESORT, aliases: [petrovac, petrovac na moru] }
+    - { name_sr: Sveti Stefan, kind: RESORT }
+    - { name_sr: Miločer, kind: RESORT }
+    - { name_sr: Sutomore, kind: RESORT }
+    - { name_sr: Bar, kind: RESORT }
+    - { name_sr: Čanj, kind: RESORT }
+    - { name_sr: Dobre Vode, kind: RESORT }
+    - { name_sr: Ulcinj, kind: RESORT, aliases: [ulcinj, velika plaza] }
+    - { name_sr: Herceg Novi, kind: RESORT }
+    - { name_sr: Igalo, kind: RESORT }
+    - { name_sr: Đenovići, kind: RESORT }
+    - { name_sr: Bijela, kind: RESORT }
+    - { name_sr: Tivat, kind: RESORT }
+    - { name_sr: Kotor, kind: RESORT }
+    - { name_sr: Perast, kind: RESORT }
+    - { name_sr: Žabljak, kind: RESORT, ski: true, aliases: [zabljak, durmitor] }
+    - { name_sr: Kolašin, kind: RESORT, ski: true }
+    - { name_sr: Podgorica, kind: CITY }
+
+GR:
+  name_sr: Grčka
+  name_en: Greece
+  aliases: [grcka, greece, helada]
+  children:
+    - name_sr: Halkidiki
+      kind: REGION
+      aliases: [halkidiki, chalkidiki, halkidiki grcka]
+      children:
+        - { name_sr: Kasandra, kind: REGION, aliases: [kasandra, kassandra] }
+        - { name_sr: Sitonija, kind: REGION, aliases: [sitonija, sithonia] }
+        - { name_sr: Atos, kind: REGION, aliases: [atos, athos] }
+        - { name_sr: Hanioti, kind: RESORT, aliases: [hanioti, chaniotis] }
+        - { name_sr: Pefkohori, kind: RESORT, aliases: [pefkohori, pefkochori] }
+        - { name_sr: Polihrono, kind: RESORT }
+        - { name_sr: Kalitea, kind: RESORT, aliases: [kalitea, kallithea] }
+        - { name_sr: Nea Kalikratija, kind: RESORT }
+        - { name_sr: Neos Marmaras, kind: RESORT }
+        - { name_sr: Sarti, kind: RESORT }
+        - { name_sr: Nikiti, kind: RESORT }
+        - { name_sr: Toroni, kind: RESORT }
+        - { name_sr: Metamorfozis, kind: RESORT }
+        - { name_sr: Vurvuru, kind: RESORT, aliases: [vurvuru, vourvourou] }
+        - { name_sr: Ouranopolis, kind: RESORT }
+    - name_sr: Olimpska regija
+      kind: REGION
+      aliases: [olimpska regija, pieria, pijerija, grcka olimpska regija]
+      children:
+        - { name_sr: Paralija, kind: RESORT, aliases: [paralija, paralia, paralija katerini] }
+        - { name_sr: Nei Pori, kind: RESORT, aliases: [nei pori, neoi poroi] }
+        - { name_sr: Leptokarija, kind: RESORT, aliases: [leptokarija, leptokaria] }
+        - { name_sr: Platamon, kind: RESORT, aliases: [platamon, platamonas] }
+        - { name_sr: Olimpik Bič, kind: RESORT, aliases: [olimpik bic, olympic beach] }
+        - { name_sr: Skotina, kind: RESORT }
+        - { name_sr: Panteleimonas, kind: RESORT }
+    - name_sr: Pierija i Solun
+      kind: REGION
+      aliases: [solunska regija]
+      children:
+        - { name_sr: Solun, name_en: Thessaloniki, kind: CITY, aliases: [solun, thessaloniki, saloniki] }
+        - { name_sr: Asprovalta, kind: RESORT }
+        - { name_sr: Nea Vrasna, kind: RESORT }
+        - { name_sr: Stavros, kind: RESORT }
+    - { name_sr: Tasos, name_en: Thassos, kind: ISLAND, aliases: [tasos, thassos, ostrvo tasos] }
+    - { name_sr: Krf, name_en: Corfu, kind: ISLAND, aliases: [krf, corfu, kerkira] }
+    - { name_sr: Zakintos, name_en: Zakynthos, kind: ISLAND, aliases: [zakintos, zakynthos, zante] }
+    - { name_sr: Lefkada, kind: ISLAND, aliases: [lefkada, lefkas] }
+    - { name_sr: Krit, name_en: Crete, kind: ISLAND, aliases: [krit, crete, kreta] }
+    - { name_sr: Rodos, name_en: Rhodes, kind: ISLAND, aliases: [rodos, rhodes] }
+    - { name_sr: Kos, kind: ISLAND }
+    - { name_sr: Santorini, kind: ISLAND }
+    - { name_sr: Mikonos, kind: ISLAND, aliases: [mikonos, mykonos] }
+    - { name_sr: Skijatos, kind: ISLAND, aliases: [skijatos, skiathos] }
+    - { name_sr: Evia, kind: ISLAND, aliases: [evia, evija] }
+    - { name_sr: Parga, kind: RESORT }
+    - { name_sr: Sivota, kind: RESORT }
+    - { name_sr: Preveza, kind: RESORT }
+    - { name_sr: Atina, name_en: Athens, kind: CITY, aliases: [atina, athens] }
+    - { name_sr: Meteori, kind: CITY, aliases: [meteori, meteora, kalambaka] }
+
+TR:
+  name_sr: Turska
+  name_en: Turkey
+  aliases: [turska, turkey, turkiye]
+  children:
+    - { name_sr: Antalija, name_en: Antalya, kind: REGION, aliases: [antalija, antalya] }
+    - { name_sr: Kemer, kind: RESORT }
+    - { name_sr: Side, kind: RESORT }
+    - { name_sr: Alanja, name_en: Alanya, kind: RESORT, aliases: [alanja, alanya] }
+    - { name_sr: Belek, kind: RESORT }
+    - { name_sr: Lara, kind: RESORT }
+    - { name_sr: Kundu, kind: RESORT, aliases: [kundu] }
+    - { name_sr: Bodrum, kind: RESORT }
+    - { name_sr: Marmaris, kind: RESORT }
+    - { name_sr: Kušadasi, name_en: Kusadasi, kind: RESORT, aliases: [kusadasi] }
+    - { name_sr: Fetije, name_en: Fethiye, kind: RESORT, aliases: [fetije, fethiye, oludeniz] }
+    - { name_sr: Istanbul, kind: CITY, aliases: [istanbul, carigrad] }
+    - { name_sr: Kapadokija, kind: REGION, aliases: [kapadokija, cappadocia] }
+
+EG:
+  name_sr: Egipat
+  name_en: Egypt
+  aliases: [egipat, egypt]
+  children:
+    - { name_sr: Hurgada, name_en: Hurghada, kind: RESORT, aliases: [hurgada, hurghada] }
+    - { name_sr: Šarm el Šeik, name_en: Sharm El Sheikh, kind: RESORT, aliases: [sarm el seik, sharm el sheikh, sarm] }
+    - { name_sr: Marsa Alam, kind: RESORT }
+    - { name_sr: Sahl Hašiš, kind: RESORT, aliases: [sahl hasis, sahl hasheesh] }
+    - { name_sr: Makadi Bej, kind: RESORT, aliases: [makadi bej, makadi bay] }
+    - { name_sr: El Guna, kind: RESORT }
+    - { name_sr: Kairo, name_en: Cairo, kind: CITY, aliases: [kairo, cairo] }
+
+AL:
+  name_sr: Albanija
+  name_en: Albania
+  aliases: [albanija, albania]
+  children:
+    - { name_sr: Drač, name_en: Durres, kind: RESORT, aliases: [drac, durres, durrës] }
+    - { name_sr: Golem, kind: RESORT }
+    - { name_sr: Valona, name_en: Vlore, kind: RESORT, aliases: [valona, vlora, vlore] }
+    - { name_sr: Saranda, kind: RESORT, aliases: [saranda, sarande] }
+    - { name_sr: Ksamil, kind: RESORT }
+    - { name_sr: Himara, kind: RESORT }
+    - { name_sr: Šengjin, kind: RESORT, aliases: [sengjin, shengjin] }
+    - { name_sr: Drimades, kind: RESORT }
+    - { name_sr: Tirana, kind: CITY }
+
+BG:
+  name_sr: Bugarska
+  name_en: Bulgaria
+  aliases: [bugarska, bulgaria]
+  children:
+    - { name_sr: Sunčev Breg, name_en: Sunny Beach, kind: RESORT, aliases: [suncev breg, sunny beach, slancev brjag] }
+    - { name_sr: Zlatni Pjasci, name_en: Golden Sands, kind: RESORT, aliases: [zlatni pjasci, golden sands] }
+    - { name_sr: Nesebar, kind: RESORT }
+    - { name_sr: Sozopol, kind: RESORT }
+    - { name_sr: Sveti Vlas, kind: RESORT }
+    - { name_sr: Obzor, kind: RESORT }
+    - { name_sr: Ravda, kind: RESORT }
+    - { name_sr: Primorsko, kind: RESORT }
+    - { name_sr: Kiten, kind: RESORT }
+    - { name_sr: Albena, kind: RESORT }
+    - { name_sr: Varna, kind: CITY }
+    - { name_sr: Burgas, kind: CITY }
+    - { name_sr: Bansko, kind: RESORT, ski: true }
+    - { name_sr: Borovec, name_en: Borovets, kind: RESORT, ski: true }
+    - { name_sr: Pamporovo, kind: RESORT, ski: true }
+    - { name_sr: Sofija, name_en: Sofia, kind: CITY, aliases: [sofija, sofia] }
+
+HR:
+  name_sr: Hrvatska
+  name_en: Croatia
+  aliases: [hrvatska, croatia]
+  children:
+    - { name_sr: Makarska, kind: RESORT, aliases: [makarska, makarska rivijera] }
+    - { name_sr: Split, kind: CITY }
+    - { name_sr: Dubrovnik, kind: CITY }
+    - { name_sr: Zadar, kind: CITY }
+    - { name_sr: Šibenik, kind: CITY }
+    - { name_sr: Vodice, kind: RESORT }
+    - { name_sr: Poreč, kind: RESORT, aliases: [porec] }
+    - { name_sr: Rovinj, kind: RESORT }
+    - { name_sr: Pula, kind: CITY }
+    - { name_sr: Umag, kind: RESORT }
+    - { name_sr: Opatija, kind: RESORT }
+    - { name_sr: Crikvenica, kind: RESORT }
+    - { name_sr: Hvar, kind: ISLAND }
+    - { name_sr: Brač, kind: ISLAND, aliases: [brac, bol] }
+    - { name_sr: Krk, kind: ISLAND }
+    - { name_sr: Zagreb, kind: CITY }
+    - { name_sr: Plitvice, kind: RESORT, aliases: [plitvice, plitvicka jezera] }
+
+IT:
+  name_sr: Italija
+  name_en: Italy
+  aliases: [italija, italy]
+  children:
+    - { name_sr: Rimini, kind: RESORT }
+    - { name_sr: Riččone, kind: RESORT, aliases: [riccione] }
+    - { name_sr: Lido di Jezolo, kind: RESORT, aliases: [lido di jesolo, jesolo] }
+    - { name_sr: Kalabrija, kind: REGION, aliases: [kalabrija, calabria] }
+    - { name_sr: Sicilija, kind: ISLAND, aliases: [sicilija, sicily] }
+    - { name_sr: Sardinija, kind: ISLAND, aliases: [sardinija, sardinia] }
+    - { name_sr: Rim, name_en: Rome, kind: CITY, aliases: [rim, rome, roma] }
+    - { name_sr: Milano, kind: CITY }
+    - { name_sr: Venecija, name_en: Venice, kind: CITY, aliases: [venecija, venice, venezia] }
+    - { name_sr: Firenca, name_en: Florence, kind: CITY, aliases: [firenca, florence, firenze] }
+    - { name_sr: Napulj, name_en: Naples, kind: CITY, aliases: [napulj, naples, napoli] }
+    - { name_sr: Toskana, kind: REGION, aliases: [toskana, tuscany] }
+    - { name_sr: Livinjo, kind: RESORT, ski: true, aliases: [livinjo, livigno] }
+    - { name_sr: Bormio, kind: RESORT, ski: true }
+    - { name_sr: Val di Fasa, kind: RESORT, ski: true, aliases: [val di fasa, val di fassa] }
+    - { name_sr: Kronplac, kind: RESORT, ski: true, aliases: [kronplac, kronplatz, plan de corones] }
+    - { name_sr: Madona di Kampiljo, kind: RESORT, ski: true, aliases: [madona di kampiljo, madonna di campiglio] }
+    - { name_sr: Selva, kind: RESORT, ski: true, aliases: [selva, val gardena] }
+
+ES:
+  name_sr: Španija
+  name_en: Spain
+  aliases: [spanija, spain, espana]
+  children:
+    - { name_sr: Kosta Brava, kind: REGION, aliases: [kosta brava, costa brava] }
+    - { name_sr: Kosta del Sol, kind: REGION, aliases: [kosta del sol, costa del sol] }
+    - { name_sr: Kosta Dorada, kind: REGION, aliases: [kosta dorada, costa dorada] }
+    - { name_sr: Malorka, name_en: Mallorca, kind: ISLAND, aliases: [malorka, mallorca, majorka] }
+    - { name_sr: Ibica, name_en: Ibiza, kind: ISLAND, aliases: [ibica, ibiza] }
+    - { name_sr: Tenerife, kind: ISLAND }
+    - { name_sr: Gran Kanarija, kind: ISLAND, aliases: [gran kanarija, gran canaria] }
+    - { name_sr: Barselona, name_en: Barcelona, kind: CITY, aliases: [barselona, barcelona] }
+    - { name_sr: Madrid, kind: CITY }
+    - { name_sr: Sevilja, kind: CITY, aliases: [sevilja, sevilla, seville] }
+    - { name_sr: Valensija, kind: CITY, aliases: [valensija, valencia] }
+
+AT:
+  name_sr: Austrija
+  name_en: Austria
+  aliases: [austrija, austria]
+  children:
+    - { name_sr: Beč, name_en: Vienna, kind: CITY, aliases: [bec, vienna, wien] }
+    - { name_sr: Salcburg, kind: CITY, aliases: [salcburg, salzburg] }
+    - { name_sr: Zel am Zee, kind: RESORT, ski: true, aliases: [zel am zee, zell am see] }
+    - { name_sr: Kaprun, kind: RESORT, ski: true }
+    - { name_sr: Šladming, kind: RESORT, ski: true, aliases: [sladming, schladming] }
+    - { name_sr: Bad Gaštajn, kind: RESORT, ski: true, aliases: [bad gastajn, bad gastein] }
+    - { name_sr: Nasfeld, kind: RESORT, ski: true }
+    - { name_sr: Zilertal, kind: RESORT, ski: true, aliases: [zilertal, zillertal, majrhofen, mayrhofen] }
+    - { name_sr: Zauhenze, kind: RESORT, ski: true, aliases: [zauchensee] }
+
+BA:
+  name_sr: Bosna i Hercegovina
+  name_en: Bosnia and Herzegovina
+  aliases: [bosna i hercegovina, bih, bosna]
+  children:
+    - { name_sr: Jahorina, kind: RESORT, ski: true }
+    - { name_sr: Bjelašnica, kind: RESORT, ski: true, aliases: [bjelasnica] }
+    - { name_sr: Kupres, kind: RESORT, ski: true }
+    - { name_sr: Vlašić, kind: RESORT, ski: true, aliases: [vlasic] }
+    - { name_sr: Sarajevo, kind: CITY }
+    - { name_sr: Mostar, kind: CITY }
+    - { name_sr: Neum, kind: RESORT }
+    - { name_sr: Banja Luka, kind: CITY }
+    - { name_sr: Trebinje, kind: CITY }
+    - { name_sr: Višegrad, kind: CITY, aliases: [visegrad, andricgrad] }
+
+MK:
+  name_sr: Severna Makedonija
+  name_en: North Macedonia
+  aliases: [severna makedonija, makedonija, north macedonia]
+  children:
+    - { name_sr: Ohrid, kind: RESORT }
+    - { name_sr: Struga, kind: RESORT }
+    - { name_sr: Dojran, kind: RESORT }
+    - { name_sr: Skoplje, name_en: Skopje, kind: CITY, aliases: [skoplje, skopje] }
+    - { name_sr: Mavrovo, kind: RESORT, ski: true }
+    - { name_sr: Popova Šapka, kind: RESORT, ski: true, aliases: [popova sapka] }
+
+SI:
+  name_sr: Slovenija
+  name_en: Slovenia
+  aliases: [slovenija, slovenia]
+  children:
+    - { name_sr: Ljubljana, kind: CITY }
+    - { name_sr: Bled, kind: RESORT }
+    - { name_sr: Bohinj, kind: RESORT, ski: true }
+    - { name_sr: Kranjska Gora, kind: RESORT, ski: true }
+    - { name_sr: Portorož, kind: RESORT, aliases: [portoroz] }
+    - { name_sr: Rogaška Slatina, kind: RESORT, aliases: [rogaska slatina] }
+
+HU:
+  name_sr: Mađarska
+  name_en: Hungary
+  aliases: [madjarska, hungary, madarska]
+  children:
+    - { name_sr: Budimpešta, name_en: Budapest, kind: CITY, aliases: [budimpesta, budapest] }
+    - { name_sr: Segedin, kind: CITY, aliases: [segedin, szeged] }
+    - { name_sr: Hajduszoboslo, kind: RESORT, aliases: [hajduszoboszlo] }
+    - { name_sr: Mora Halom, kind: RESORT, aliases: [morahalom, mora halom] }
+
+CZ:
+  name_sr: Češka
+  name_en: Czechia
+  aliases: [ceska, czechia, czech republic]
+  children:
+    - { name_sr: Prag, name_en: Prague, kind: CITY, aliases: [prag, prague, praha] }
+    - { name_sr: Karlove Vari, kind: CITY, aliases: [karlove vari, karlovy vary] }
+
+FR:
+  name_sr: Francuska
+  name_en: France
+  aliases: [francuska, france]
+  children:
+    - { name_sr: Pariz, name_en: Paris, kind: CITY, aliases: [pariz, paris] }
+    - { name_sr: Nica, name_en: Nice, kind: CITY, aliases: [nica, nice] }
+    - { name_sr: Lazurna obala, kind: REGION, aliases: [lazurna obala, cote d azur] }
+    - { name_sr: Val Torans, kind: RESORT, ski: true, aliases: [val torans, val thorens] }
+    - { name_sr: Tinj, kind: RESORT, ski: true, aliases: [tinj, tignes] }
+
+DE:
+  name_sr: Nemačka
+  name_en: Germany
+  aliases: [nemacka, germany]
+  children:
+    - { name_sr: Berlin, kind: CITY }
+    - { name_sr: Minhen, name_en: Munich, kind: CITY, aliases: [minhen, munich, munchen] }
+    - { name_sr: Hamburg, kind: CITY }
+    - { name_sr: Frankfurt, kind: CITY }
+
+PT:
+  name_sr: Portugalija
+  name_en: Portugal
+  aliases: [portugalija, portugal]
+  children:
+    - { name_sr: Lisabon, name_en: Lisbon, kind: CITY, aliases: [lisabon, lisbon, lisboa] }
+    - { name_sr: Porto, kind: CITY }
+    - { name_sr: Algarve, kind: REGION }
+    - { name_sr: Madeira, kind: ISLAND }
+
+NL:
+  name_sr: Holandija
+  name_en: Netherlands
+  aliases: [holandija, netherlands, nizozemska]
+  children:
+    - { name_sr: Amsterdam, kind: CITY }
+
+GB:
+  name_sr: Velika Britanija
+  name_en: United Kingdom
+  aliases: [velika britanija, uk, engleska]
+  children:
+    - { name_sr: London, kind: CITY }
+    - { name_sr: Edinburg, kind: CITY, aliases: [edinburg, edinburgh] }
+
+PL:
+  name_sr: Poljska
+  name_en: Poland
+  aliases: [poljska, poland]
+  children:
+    - { name_sr: Krakov, name_en: Krakow, kind: CITY, aliases: [krakov, krakow, krakuv] }
+    - { name_sr: Varšava, kind: CITY, aliases: [varsava, warsaw] }
+    - { name_sr: Zakopane, kind: RESORT, ski: true }
+
+RO:
+  name_sr: Rumunija
+  name_en: Romania
+  aliases: [rumunija, romania]
+  children:
+    - { name_sr: Bukurešt, name_en: Bucharest, kind: CITY, aliases: [bukurest, bucharest] }
+    - { name_sr: Temišvar, kind: CITY, aliases: [temisvar, timisoara] }
+    - { name_sr: Brašov, kind: CITY, aliases: [brasov] }
+
+AE:
+  name_sr: Ujedinjeni Arapski Emirati
+  name_en: United Arab Emirates
+  aliases: [uae, emirati, ujedinjeni arapski emirati]
+  children:
+    - { name_sr: Dubai, kind: CITY, aliases: [dubai, dubaj] }
+    - { name_sr: Abu Dabi, kind: CITY, aliases: [abu dabi, abu dhabi] }
+    - { name_sr: Ras el Hajma, kind: RESORT, aliases: [ras el hajma, ras al khaimah] }
+
+TH:
+  name_sr: Tajland
+  name_en: Thailand
+  aliases: [tajland, thailand]
+  children:
+    - { name_sr: Bangkok, kind: CITY }
+    - { name_sr: Puket, name_en: Phuket, kind: ISLAND, aliases: [puket, phuket] }
+    - { name_sr: Krabi, kind: RESORT }
+    - { name_sr: Koh Samui, kind: ISLAND, aliases: [koh samui, samui] }
+    - { name_sr: Pataja, kind: RESORT, aliases: [pataja, pattaya] }
+
+TZ:
+  name_sr: Tanzanija
+  name_en: Tanzania
+  aliases: [tanzanija, tanzania]
+  children:
+    - { name_sr: Zanzibar, kind: ISLAND }
+
+MV:
+  name_sr: Maldivi
+  name_en: Maldives
+  aliases: [maldivi, maldives]
+
+LK:
+  name_sr: Šri Lanka
+  name_en: Sri Lanka
+  aliases: [sri lanka, sri lanka]
+
+ID:
+  name_sr: Indonezija
+  name_en: Indonesia
+  aliases: [indonezija, indonesia]
+  children:
+    - { name_sr: Bali, kind: ISLAND }
+
+CU:
+  name_sr: Kuba
+  name_en: Cuba
+  aliases: [kuba, cuba]
+  children:
+    - { name_sr: Varadero, kind: RESORT }
+    - { name_sr: Havana, kind: CITY }
+
+DO:
+  name_sr: Dominikanska Republika
+  name_en: Dominican Republic
+  aliases: [dominikana, dominikanska republika, dominican republic]
+  children:
+    - { name_sr: Punta Kana, kind: RESORT, aliases: [punta kana, punta cana] }
+
+MX:
+  name_sr: Meksiko
+  name_en: Mexico
+  aliases: [meksiko, mexico]
+  children:
+    - { name_sr: Kankun, kind: RESORT, aliases: [kankun, cancun] }
+    - { name_sr: Rivijera Maja, kind: REGION, aliases: [rivijera maja, riviera maya] }
+
+TN:
+  name_sr: Tunis
+  name_en: Tunisia
+  aliases: [tunis, tunisia]
+  children:
+    - { name_sr: Hamamet, kind: RESORT, aliases: [hamamet, hammamet] }
+    - { name_sr: Suse, kind: RESORT, aliases: [suse, sousse] }
+    - { name_sr: Džerba, kind: ISLAND, aliases: [dzerba, djerba] }
+
+MA:
+  name_sr: Maroko
+  name_en: Morocco
+  aliases: [maroko, morocco]
+  children:
+    - { name_sr: Marakeš, kind: CITY, aliases: [marakes, marrakech] }
+    - { name_sr: Agadir, kind: RESORT }
+
+CY:
+  name_sr: Kipar
+  name_en: Cyprus
+  aliases: [kipar, cyprus]
+  children:
+    - { name_sr: Ajia Napa, kind: RESORT, aliases: [ajia napa, ayia napa] }
+    - { name_sr: Larnaka, kind: CITY, aliases: [larnaka, larnaca] }
+    - { name_sr: Pafos, kind: RESORT, aliases: [pafos, paphos] }
+
+MT:
+  name_sr: Malta
+  name_en: Malta
+  aliases: [malta]
+
+AD:
+  name_sr: Andora
+  name_en: Andorra
+  aliases: [andora, andorra]
+
+SK:
+  name_sr: Slovačka
+  name_en: Slovakia
+  aliases: [slovacka, slovakia]
+  children:
+    - { name_sr: Jasna, kind: RESORT, ski: true }
+    - { name_sr: Bratislava, kind: CITY }
