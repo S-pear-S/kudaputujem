@@ -5,7 +5,7 @@ skreper upiše alias 'djerdap', a baza traži 'derdap' i ne nalazi ništa.
 
 Test se preskače ako nema baze (npr. u brzom lokalnom pokretanju).
 Pokretanje sa bazom:
-    DATABASE_URL=postgresql://postgres@localhost:5432/putovanja pytest tests/test_sql_parity.py
+    DATABASE_URL=postgresql://postgres@localhost:5432/kudaputujem pytest tests/test_sql_parity.py
 """
 
 from __future__ import annotations

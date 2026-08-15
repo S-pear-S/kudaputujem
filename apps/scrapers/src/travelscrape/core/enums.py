@@ -1,6 +1,6 @@
 """Kanonske šifre. Moraju da se poklapaju sa enumima u Kotlin API-ju.
 
-Ako se ovde nešto doda, dodaje se i u `rs.putovanja.api.domain.enums` i u CHECK
+Ako se ovde nešto doda, dodaje se i u `rs.kudaputujem.api.domain.enums` i u CHECK
 ograničenja migracije. Zato su vrednosti stringovi, ne brojevi.
 """
 

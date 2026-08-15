@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kudaputujem-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kudaputujem}
+      POSTGRES_USER: ${POSTGRES_USER:-kudaputujem}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-promeni_me}
+      # Bez ovoga inicijalizacija koristi C lokal i sortiranje srpskih slova je pogrešno.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kudaputujem} -d ${POSTGRES_DB:-kudaputujem}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: kudaputujem-redis
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # API se u razvoju pokreće iz IntelliJ-a (./gradlew bootRun), ne odavde.
+  # Ovaj servis se koristi tek kad testiramo ceo lanac u kontejnerima:
+  #   docker compose --profile full up
+  api:
+    profiles: ["full"]
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: kudaputujem-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL_JDBC: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-kudaputujem}
+      POSTGRES_USER: ${POSTGRES_USER:-kudaputujem}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-promeni_me}
+      REDIS_URL: redis://redis:6379
+      INGEST_API_KEY: ${INGEST_API_KEY:-dev-ingest-key}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-admin-key}
+      IP_HASH_SALT: ${IP_HASH_SALT:-dev-salt}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

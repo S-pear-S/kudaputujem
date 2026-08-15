@@ -1,4 +1,4 @@
-# Putovanja — metapretraživač turističkih ponuda (Srbija)
+# Kuda putujem — metapretraživač turističkih ponuda (Srbija)
 
 Agregator ponuda srpskih turističkih agencija: aranžmani (prevoz + smeštaj), samo prevoz i samo smeštaj.
 Podaci se skidaju skreperima u naš indeks, korisnik pretražuje indeks, a kontakt ide preko lead forme.

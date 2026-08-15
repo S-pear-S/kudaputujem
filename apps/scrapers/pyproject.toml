@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "travelscrape"
 version = "0.1.0"
-description = "Skreperi srpskih turističkih agencija za Putovanja metapretraživač"
+description = "Skreperi srpskih turističkih agencija za Kuda putujem metapretraživač"
 requires-python = ">=3.11"
 dependencies = [
     "httpx[http2]>=0.27",

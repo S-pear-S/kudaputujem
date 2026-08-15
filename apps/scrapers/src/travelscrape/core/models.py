@@ -2,7 +2,7 @@
 
 Ovo je JEDINA stvar koju obe strane moraju da razumeju. Skreper ne zna za bazu,
 API ne zna za HTML. Svaka promena ovde je promena ugovora i mora da ide zajedno
-sa promenom u `rs.putovanja.api.ingest.dto`.
+sa promenom u `rs.kudaputujem.api.ingest.dto`.
 
 Tri nivoa:
     RawOffer   — šta je adapter pokupio, sve stringovi, ništa nije garantovano
