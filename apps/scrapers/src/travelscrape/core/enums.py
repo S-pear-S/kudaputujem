@@ -6,7 +6,15 @@ ograničenja migracije. Zato su vrednosti stringovi, ne brojevi.
 
 from __future__ import annotations
 
-from enum import StrEnum
+import sys
+
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:
+    from enum import Enum
+
+    class StrEnum(str, Enum):  # type: ignore[no-redef]
+        pass
 
 
 class ProductKind(StrEnum):
