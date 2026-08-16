@@ -4,7 +4,7 @@
 > Ako nešto u kodu protivreči ovom fajlu, prvo pitaj — ne pretpostavljaj da je fajl zastareo.
 > Kad doneseš novu odluku ili završiš veću stavku, **ažuriraj ovaj fajl u istom commit-u**.
 
-Poslednje ažuriranje: 15.08.2026. (build fix)
+Poslednje ažuriranje: 16.08.2026. (soleazur adapter + 24 testa) (recon 33 sajta integrisan u docs/recon/)
 Repo: `https://github.com/S-pear-S/kudaputujem` · grana `main`
 
 ---
@@ -125,16 +125,56 @@ platformi** koje agencije kupuju gotove. Jedan adapter po platformi pokriva 5–
 
 | Platforma | Prepoznaje se po | Potvrđene agencije |
 |---|---|---|
-| **Onesystem** (Joy Group, Beograd) | `onesystem-powered.png` u footeru, WP tema `onesystem_wp_theme`, parametri `packagecountryid`, `packagecityid`, `packagedeparture`, `packageduration` | 1A Travel |
-| **b2cservice engine** | URL-ovi `/sr/search-router/...`, `/sr/hotel/...`, parametri `SearchType`, `Hotel`, `CheckIn`, `R1Adult`, `Night`, `HpCode`, `Criteria`; poddomeni `newcms.*` i `b2cservice.*` | Big Blue, Kon Tiki (isti vlasnik), verovatno Odeon Travel |
-| **Fibula sopstveni** | `/search?productType=2&to=1962-Region&nights=5,6,7,8,9` | Fibula Air Travel |
+| **Onesystem** (Joy Group, Beograd) | `onesystem-powered.png` u footeru, WP tema `onesystem_wp_theme`, sitemap na `admin-ajax.php?action=os_sitemap`, DB prefiks `onesystem_`; parametri `countrytermid`, `citytermid`, `departurefromid`, `departuredate`, `duration`, `adlcount`, `chdcount`, `chdage1..4` | 1A Travel — potvrđeno, treći talas (cena je funkcija popunjenosti, nema tabelu) |
+| ~~TourVisio B2C~~ (SAN Tourism Software Group) | `Disallow: /*.asmx` i `/*.ashx`, rute `/sr/search-router/`, neizrenderovan template `{{offer.price.amount}}` u HTML-u | Big Blue, Kon Tiki, Filip Travel, Odeon Travel — **sve četiri ISKLJUČENE**, blokiraju baš putanje sa podacima |
+| ~~Fibula~~ | SPA + inventar iz **Peakwork** huba, cene dinamičke po upitu | Fibula Air Travel — **ISKLJUČENA**, robots.txt blokira skrepere uključujući Scrapy |
 | **cloudhosting.rs multi-tenant** | `vs<broj>.cloudhosting.rs/<Destinacija>?prevoz=autobus&sort=1&page=N` | Oktopod Travel |
 | **WordPress + ručne HTML tabele cena** | `wp-content`, tabela sa datumima polaska u zaglavlju i `1/2`, `1/3`, `1/4` redovima | Feniks Tours, Plana Travel, Euroturs, Viva Travel |
-| Sopstveni CMS | — | Travelland, Aqua Travel, Felix Travel, Tim Travel, Sabra, Filip Travel, Grand Tours, Deus Travel, Lider, Belvi, Olympic, Sole Azur, Amos, Hedonic, Magic, Maestral, Rapsody, Online Travel, Time Travel |
+| Sopstveni CMS | — | Travelland, Aqua Travel, Felix Travel, Tim Travel, Sabra, Grand Tours, Deus Travel, Lider, Belvi, Olympic, Sole Azur, Amos, Hedonic, Magic, Maestral, Rapsody, Online Travel, Time Travel |
 
-Zato **prvo Onesystem i b2cservice** — dva adaptera, realno 10+ agencija.
+Recon od 33 sajta je **opovrgao** originalnu pretpostavku "prvo velike platforme" kao glavnu
+strategiju. Velike agencije jesu na zajedničkim platformama, ali su te platforme zatvorene:
+TourVisio grupa (4 agencije) blokira `.asmx`/`.ashx` i `/sr/search-router/`, Fibula blokira
+Scrapy, Onesystem nema cenovnik u HTML-u.
+
+Prava prilika su **mali sajtovi sa ručnim HTML cenovnicima i otvorenim robots.txt**. Detaljni
+izveštaj po svakom od 33 sajta (platforma, robots.txt, URL šeme, primer cenovnika gde je nađen)
+je u `docs/recon/`, rangiranje i metod u `docs/recon/README.md`.
+
+**Redosled adaptera:**
+- Talas 1: `soleazur.rs` ✓, `planatravel.rs`, `onlinetravel.rs`, `maestral.co.rs`, `aquatravel.rs`
+- Talas 2: `travelland.rs`, `felixtravel.rs`, `timtravel.rs`, `grandtours.rs`, `euroturs.rs`, `magictravel.rs`, `amostravel.rs`, `rapsodytravel.rs`, `belvi.rs`, `lidertravel.rs`, `hedonictravel.rs`, `sabra.rs`, `oktopod.rs`
+- Talas 3 (teško): `1atravel.rs` (Onesystem), `kontiki.rs`, `olympic.rs`, `timetravel.rs`
+- Isključeni (9, robots.txt blokira skrepere): `bigblue.rs`, `fibula.rs`, `filiptravel.rs`, `odeontravel.rs`, `deustravel.rs`, `feniks-tours.rs`, `vivatravel.rs`, `balkanviator.com`, `lasta.rs`
+
+**Za adaptere talasa 1 i 2 — obavezan redosled:**
+1. Otvori stranicu hotela u Chrome-u, sačuvaj HTML (`Ctrl+S → Webpage, HTML Only`)
+2. Stavi u `apps/scrapers/tests/fixtures/<slug>/`
+3. Tek onda pišemo adapter — bez fixture-a selektori su nagađanje
 
 Pun katalog izvora sa statusom je u `docs/SOURCES.md`.
+
+### 4.4b Cena po rasporedu sobe često NE POSTOJI kao tabela
+
+Nalaz recona, menja pretpostavku pod kojom je pisan `OccupancySolver`.
+
+Na delu izvora (potvrđeno na 1A Travel-u i Fibuli) agencija ne objavljuje matricu
+`1/2`, `1/2+1`, `1/4`. Cena je **funkcija popunjenosti** i dobija se tek parametrizovanom
+pretragom sa `adlcount`, `chdcount`, `chdage1..4`. 1A Travel to piše doslovno na sajtu.
+
+Posledice:
+
+- Za takve izvore adapter radi **N upita po ponudi** (termin × sastav putnika), ne jedan skrep
+  cenovnika. Ograničiti na tipične rasporede: 2 odrasla, 2+1 dete, 2+2 dece, 3 odrasla,
+  4 odrasla; i tipične dužine 7 i 10 noći.
+- `price_option.room_code` se u tim slučajevima **izvodi** iz zatraženog sastava putnika
+  (`adlcount=2, chdcount=1` → `1/2+1`), a ne čita sa sajta. Upisati u `notes` da je izveden.
+- `OccupancySolver` i dalje radi neizmenjen — samo dobija manje redova nego kod izvora sa
+  pravim cenovnikom.
+
+Izvori sa pravim HTML tabelama cena (talas 1/2) ostaju kakvi jesu i tamo se `room_code` čita
+doslovno. Ovo pravilo se aktivira tek za talas 3 (`1atravel.rs`, `kontiki.rs`, `olympic.rs`,
+`timetravel.rs`), ako se ikad odluči da se za njih piše adapter.
 
 ### 4.5 Deduplikacija nikad ne spaja automatski ispod praga
 
@@ -214,7 +254,7 @@ generiše migraciju `V2__seed_geo.sql`. **Novi alias se dodaje u YAML, ne ručno
 |---|---|
 | Šema baze, 19 tabela | migracije puštene na pravom PostgreSQL 16, prolaze čisto |
 | Geo seed (323 destinacije) | učitan, hijerarhija Sitonija→Halkidiki→Grčka radi |
-| Python normalizatori | **112 testova prolazi** (`pytest`) |
+| Python normalizatori + soleazur adapter | **123 testa prolazi** (`pytest`) |
 | Parity `normalize()` ↔ `norm_text()` | test `test_sql_parity.py` sa pravom bazom |
 | Sav SQL iz Kotlin koda | ~20 naredbi ručno puštenih na pravom Postgresu, sve prolaze |
 | Logika `OccupancySolver`-a | verifikovana nezavisnim Python prototipom na 11 slučajeva pre pisanja Kotlina |
@@ -231,17 +271,28 @@ Popravke koje su bile potrebne pri prvom buildu:
 Napisano: `ApiApplication`, config (ApiProperties, ApiKeyFilter, Web, Jackson, OpenApi),
 common (Errors, PageResponse, Text), `domain/Enums.kt`, `OccupancySolver` + 17 testova,
 `PriceIndexBuilder`, `ExchangeRateService`, `DestinationResolver`, `AccommodationResolver`,
-`CrawlRunService`, ingest (DTO, Service, Controller, OfferWriter).
+`CrawlRunService`, ingest (DTO, Service, Controller, OfferWriter),
+search (SearchRequest, SearchResult, SearchService, SearchController).
+
+### Adapteri — STANJE
+
+| Adapter | Fajl | Status |
+|---|---|---|
+| soleazur.rs | `adapters/soleazur.py` | ✓ Gotov, 24 testa prolaze. **CSS selektori su PRETPOSTAVLJENI** — verifikovati lokalno sa `travelscrape snapshot soleazur-grcka https://soleazur.rs/lm/display_prices.php` pre prve produkcijske runde |
+| planatravel.rs | — | Čeka HTML fixture |
+| onlinetravel.rs | — | Čeka HTML fixture |
+| maestral.co.rs | — | Čeka HTML fixture (maestral.co.rs **eksplicitno dopušta** ClaudeBot u robots.txt) |
+| aquatravel.rs | — | Čeka HTML fixture |
+| ostali talas 2 | — | Čekaju fixtere |
 
 ### NE POSTOJI
 
 - Gradle wrapper (`gradlew`) — generiše se sa `gradle wrapper` ili kroz IntelliJ
-- Search API (`/api/search`) — **sledeći korak**
 - Offer detail, destination autocomplete, lead API, admin API
-- Ceo `apps/web` (Next.js) — folder je prazan
-- Skreper framework: `core/fetch.py`, `core/adapter.py`, `core/registry.py`, `core/pipeline.py`,
-  `core/ingest.py`, `cli.py`, `recon/`
-- Nijedan adapter za konkretnu agenciju
+- `apps/web` (Next.js) — folder je prazan
+- Destination autocomplete (zahteva novi API endpoint)
+- Offer detail stranica (`/ponuda/[slug]`)
+- Facet sidebar (filter po ceni, zvezdama, usluzi)
 - CI (GitHub Actions)
 - Politika privatnosti, uslovi korišćenja
 
@@ -250,18 +301,20 @@ common (Errors, PageResponse, Text), `domain/Enums.kt`, `OccupancySolver` + 17 t
 ## 7. TODO, po redosledu
 
 1. ~~**`./gradlew build` da prođe.**~~ ✓ Urađeno 15.08.2026.
-2. **Search API** — `GET /api/search` sa parametrima: `productKind`, `destinationId`/`countryCode`,
-   `dateFrom`, `dateTo`, `nights`, `adults`, `childAges`, `rooms`, `transportType`, `boardType`,
-   `departureFrom`, `priceMax`, `stars`, `sortBy`, `page`. Filtrira preko `departure_price_index`,
-   tačnu cenu računa `OccupancySolver` nad stranicom rezultata.
-3. **Skreper framework** — `HttpFetcher` sa SSRF zaštitom i rate limitom, `BaseAdapter`, registry,
-   pipeline, `IngestClient`, Typer CLI (`run`, `replay`, `snapshot`, `recon`, `diff-raw`).
-4. **Recon CLI** — profiliše sajt (robots.txt, sitemap, SSR vs XHR, pronađeni JSON endpointi,
-   framework) i piše `docs/recon/<slug>.md`. Korisnik ga pokreće lokalno jer cloud sesija nema
-   izlaz ka `.rs` sajtovima.
-5. **Prva dva adaptera** — Onesystem i b2cservice platforma (pokrivaju ~10 agencija).
-6. **Next.js frontend** — forma pretrage (destinacija sa autocomplete-om, datumi, brojač putnika sa
-   rasporedom po sobama, tip prevoza), lista rezultata sa fasetama, detalj ponude, lead forma.
+2. ~~**Search API**~~ ✓ Urađeno 15.08.2026. `GET /api/search` — CTE upit nad `departure_price_index`,
+   `DISTINCT ON` za najjeftiniji termin po ponudi, OccupancySolver za tačnu cenu sa decom.
+   Fajlovi: `search/{SearchRequest,SearchResult,SearchService,SearchController}.kt`.
+3. ~~**Skreper framework**~~ ✓ Urađeno 15.08.2026. `core/{settings,fetch,adapter,registry,ingest,pipeline}.py`
+   + `cli.py` + `adapters/__init__.py`. CLI: `travelscrape run/snapshot/recon/sources`.
+4. ~~**Recon CLI**~~ ✓ Deo `travelscrape recon <slug> <url>` — detektuje platformu, robots.txt,
+   sitemap, JS/SPA, API endpointe. Piše `docs/recon/<slug>.md`.
+5. ~~**Adapter soleazur.rs**~~ ✓ Urađeno 16.08.2026. `adapters/soleazur.py` — parsira `/lm/display_prices.php`
+   (jedna stranica sa svim LM cenama). 24 testa prolaze. VERIFIKUJ selektore lokalno pre prve runde.
+5b. **Adapteri za 2. talas** — `travelland.rs`, `felixtravel.rs`, `timtravel.rs`, `grandtours.rs`,
+   `aquatravel.rs`, `maestral.co.rs`, `onlinetravel.rs`, `planatravel.rs` (SSR, treba fixture lokalno).
+6. ~~**Next.js frontend**~~ ✓ Urađeno 16.08.2026. Homepage + forma pretrage, `/pretraga` SSR stranica,
+   `OfferCard`, `PaxSelector`, `LeadModal` (placeholder za backend), `/api/lead` Next.js ruta.
+   `npm run build` prolazi čisto. `npm run dev` pokreće na `:3000`.
 7. Lead API sa rate limitom i `delete_after` job-om.
 8. Admin panel za `PENDING` aliase.
 9. NBS sinhronizacija kursa (`exchange_rate`).
@@ -301,7 +354,14 @@ common (Errors, PageResponse, Text), `domain/Enums.kt`, `OccupancySolver` + 17 t
 11. **Nema plaćanja ni rezervacije na našem sajtu.** Samo lead forma i redirect.
 12. **Lični podaci**: saglasnost nije unapred štiklirana, `consent_text_version` se čuva, IP se
     čuva **hešovan sa solju**, `delete_after` se postavlja pri kreiranju leada.
-13. **Tajne nikad u repo.** `INGEST_API_KEY` i `ADMIN_API_KEY` su namerno odvojeni — skreper koji
+13. **Devet izvora je isključeno jer im robots.txt blokira skrepere.** To su `bigblue.rs`,
+    `fibula.rs`, `filiptravel.rs`, `odeontravel.rs`, `deustravel.rs`, `feniks-tours.rs`,
+    `vivatravel.rs`, `balkanviator.com`, `lasta.rs`. Naš bot `KudaPutujemBot` nije na njihovim
+    spiskovima, pa nas slovo protokola ne pokriva — ali sajt koji nabraja 40 skrepera i svima
+    daje `Disallow: /` ne želi automatizovan pristup, a preimenovanje bota da bi se provuklo
+    kroz rupu je isto što i lažiranje Chrome UA. **Ne piši adaptere za njih dok kruska ne odluči.**
+    Ista provera važi za svaki novi izvor: `docs/recon/<slug>.md`, polje "Blokira nas".
+14. **Tajne nikad u repo.** `INGEST_API_KEY` i `ADMIN_API_KEY` su namerno odvojeni — skreper koji
     procuri ne sme da može da briše agencije.
 
 ---
@@ -318,6 +378,8 @@ common (Errors, PageResponse, Text), `domain/Enums.kt`, `OccupancySolver` + 17 t
 | Solver pretpostavlja neograničen broj jedinica svakog tipa | prihvaćeno | dokumentovano u KDoc-u i mora se reći korisniku u UI-ju |
 | `raw_document` će brzo rasti | srednja | brisati starije od 30 dana, particionisati po mesecu preko 50 GB |
 | Nema CI | srednja | testovi se za sada pokreću ručno |
+| soleazur.rs CSS selektori neprovereni | **visoka** | `h2/h3/thead/tbody` su pretpostavljeni na osnovu Markdown izlaza WebFetch-a; puca tiho ako su tagovi drugačiji; pokrenuti `travelscrape snapshot` pre produkcije |
+| Python 3.8.2 na sistemu korisnika | napomena | pyproject.toml zahteva >=3.12; za pokretanje testova ručno: `set PYTHONPATH=D:\Kiki\kudaputujem\apps\scrapers\src` + Python 3.8 sa `pip install httpx selectolax pydantic pydantic-settings tenacity eval_type_backport` |
 
 ---
 
@@ -398,3 +460,7 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | 15.08.2026 | JdbcClient umesto JPA |
 | 15.08.2026 | Ime projekta: "Kuda putujem", paket `rs.kudaputujem` |
 | 15.08.2026 | Grupisanje izvora po platformi umesto po agenciji (nalaz recona) |
+| 16.08.2026 | Recon 33 sajta završen — TourVisio i Fibula isključeni, Onesystem u treći talas; mali agenti sa HTML tabelama su pravi target |
+| 16.08.2026 | Adapter soleazur.rs gotov — `adapters/soleazur.py`, jedna PHP stranica sa svim LM cenama, 24 testa |
+| 16.08.2026 | `StrEnum` compatibility shim dodat u `core/enums.py` (Python 3.8 nema `StrEnum`, dodat je u 3.11) |
+| 16.08.2026 | Recon izveštaji (33 fajla) integrisani u `docs/recon/`, `docs/SOURCES.md` i §4.4/§4.4b usklađeni |

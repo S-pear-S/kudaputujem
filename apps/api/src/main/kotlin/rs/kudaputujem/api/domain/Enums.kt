@@ -141,15 +141,18 @@ enum class LeadStatus { NEW, SENT, FAILED, CONTACTED, CLOSED, SPAM }
 
 enum class AliasStatus { CONFIRMED, PENDING, REJECTED }
 
-/** Dozvoljena polja za sortiranje. Whitelist, da `sort` parametar ne može u SQL. */
+/**
+ * Dozvoljena polja za sortiranje. Whitelist — `sort` parametar ne moze direktno u SQL.
+ * Vrednosti moraju odgovarati aliasima kolona u SearchService CTE-u.
+ */
 enum class SortBy(val sqlExpression: String) {
-    PRICE("dpi.total_rsd"),
-    PRICE_PER_PERSON("dpi.per_person_rsd"),
-    DATE("d.start_date"),
-    NIGHTS("d.nights"),
-    STARS("a.stars"),
-    RATING("a.rating_avg"),
-    UPDATED("o.last_seen_at");
+    PRICE("total_rsd"),
+    PRICE_PER_PERSON("per_person_rsd"),
+    DATE("start_date"),
+    NIGHTS("nights"),
+    STARS("stars"),
+    RATING("rating_avg"),
+    UPDATED("last_seen_at");
 
     companion object {
         fun fromParam(value: String?): SortBy =

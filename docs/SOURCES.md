@@ -1,6 +1,6 @@
 # Katalog izvora
 
-Status: **recon faza**. Kolone `robots` i `ToS` se popunjavaju tek posle ručne provere, i izvor se
+Status: **recon završen za 33 sajta** — vidi [docs/recon/](recon/README.md). Kolone `robots` i `ToS` se popunjavaju tek posle ručne provere, i izvor se
 ne uključuje dok obe nisu zelene.
 
 ## Najvažniji nalaz recona: grupisati po PLATFORMI, ne po agenciji
@@ -11,67 +11,73 @@ pokriva 5-15 agencija odjednom.
 
 | Platforma | Prepoznaje se po | Agencije (potvrđeno reconom) | Prioritet |
 |---|---|---|---|
-| **Onesystem** (Joy Group, Beograd) | `onesystem-powered.png` u footeru, WP tema `onesystem_wp_theme`, parametri `packagecountryid`, `packagecityid`, `packagedeparture`, `packageduration` | 1A Travel | **1** |
-| **B2C engine sa `b2cservice` / `newcms` poddomenima** | URL-ovi `/sr/search-router/...`, `/sr/hotel/...`, parametri `SearchType`, `Hotel`, `CheckIn`, `R1Adult`, `Night`, `HpCode`, `Criteria` | Big Blue, Kon Tiki (isti vlasnik i isti engine), verovatno Odeon Travel | **1** |
-| **Fibula sopstveni** | `/search?productType=2&to=1962-Region&nights=5,6,7,8,9` — čist REST-oliki upit, ID destinacije u obliku `<id>-Region` | Fibula Air Travel | 2 |
+| **Onesystem** (Joy Group, Beograd) | `onesystem-powered.png` u footeru, WP tema `onesystem_wp_theme`, sitemap na `admin-ajax.php?action=os_sitemap`, DB prefiks `onesystem_` | 1A Travel — potvrđeno | 3 (nema cenovnik u HTML-u) |
+| ~~**TourVisio B2C**~~ (SAN Tourism Software Group) | `Disallow: /*.asmx` i `/*.ashx` u robots.txt, `/sr/search-router/`, neizrenderovan template kod (`{{offer.price.amount}}`) | Big Blue, Kon Tiki, Filip Travel, Odeon Travel — **sve četiri ISKLJUČENE**, blokiraju baš putanje sa podacima | — |
+| ~~**Fibula sopstveni**~~ | SPA + inventar iz **Peakwork** huba, cene dinamičke po upitu | Fibula Air Travel — **ISKLJUČENA**, robots.txt blokira skrepere uključujući Scrapy | — |
 | **cloudhosting.rs multi-tenant** | `vs<broj>.cloudhosting.rs/<Destinacija>?prevoz=autobus&sort=1&page=N` | Oktopod Travel | 2 |
-| **WordPress + ručne HTML tabele cena** | `wp-content`, tabela sa datumima polaska u zaglavlju i `1/2`, `1/3`, `1/4` redovima | Feniks Tours, Plana Travel, Euroturs, Vivatravel | 3 |
-| **Sopstveni CMS** | — | Travelland, Aqua Travel, Felix Travel, Tim Travel, Sabra, Filip Travel, Grand Tours, Deus Travel, Lider Travel, Belvi, Olympic, Sole Azur, Amos, Hedonic, Magic Travel, Maestral, Rapsody, Online Travel, Time Travel | 3 |
+| **WordPress + ručne HTML tabele cena** | `wp-content`, tabela sa datumima polaska u zaglavlju i `1/2`, `1/3`, `1/4` redovima | Feniks Tours (isključen, robots), Plana Travel, Euroturs, Vivatravel (isključen, robots) | 1 |
+| **Sopstveni CMS** | — | Travelland, Aqua Travel, Felix Travel, Tim Travel, Sabra, Grand Tours, Deus Travel (isključen, robots), Lider Travel, Belvi, Olympic, Sole Azur, Amos, Hedonic, Magic Travel, Maestral, Rapsody, Online Travel, Time Travel | 1–3, vidi `docs/recon/README.md` |
 
 ### Šta ovo menja u planu
 
-1. **Prvo Onesystem i b2cservice engine.** Dva adaptera → realno 10+ agencija.
-2. **Onesystem se kontaktira za feed.** Njihov marketing eksplicitno pominje integracije i slanje
-   podataka partnerima, i integrisani su sa E-Turist sistemom. Ako daju partnerski feed, dobijamo
-   strukturisane podatke umesto skrepovanja — čistije, brže i pravno bez rizika.
-3. WordPress sajtovi sa ručnim tabelama su najteži (tabela je slika strukture, ne podataka) i idu
-   poslednji, ali su i najbrojniji na dugom repu.
+Pretpostavka "prvo velike platforme" je **opovrgnuta** reconom od 33 sajta. Velike agencije jesu
+na zajedničkim platformama, ali su te platforme zatvorene za skrepovanje:
+
+1. **TourVisio grupa (4 agencije) je zatvorena.** Big Blue, Kon Tiki, Filip Travel i Odeon Travel
+   dele isti engine, ali robots.txt kod sve četiri blokira `.asmx`/`.ashx` i `/sr/search-router/` —
+   baš putanje koje nose cene. Ne piše se adapter dok se ne otvori (npr. dogovorom o feedu).
+2. **Onesystem (1A Travel) je potvrđen, ali ide u treći talas.** Nema tabelu cena u HTML-u — cena
+   je funkcija popunjenosti, dobija se tek parametrizovanom pretragom. Vidi CLAUDE.md §4.4b.
+3. **Prava prilika su mali sajtovi sa ručnim HTML cenovnicima i otvorenim robots.txt.** `soleazur.rs`
+   ima PHP endpoint koji vraća gotovu tabelu cena — najbolji nalaz recona, prvi napisani adapter.
+4. **Devet sajtova blokira skrepere u robots.txt** (uključujući ClaudeBot eksplicitno) i ostaje
+   isključeno dok kruska ne odluči drugačije — vidi CLAUDE.md pravilo 13 i `docs/recon/README.md`.
 
 ## Kandidati — aranžmani (PACKAGE)
 
 | Agencija | Domen | Platforma | Tip ponude | robots | ToS | Status |
 |---|---|---|---|---|---|---|
-| Big Blue | bigblue.rs | b2cservice | bus, avio, sopstveni, ture | ? | ? | recon |
-| Kon Tiki | kontiki.rs | b2cservice | avio, sopstveni, ture, daleke | ? | ? | recon |
-| 1A Travel | 1atravel.rs | Onesystem | avio (čarter) | ? | ? | recon |
-| Fibula Air Travel | fibula.rs | sopstvena | avio (čarter), sopstveni | ? | ? | recon |
-| Travelland | travelland.rs | sopstveni CMS | avio, sopstveni, ture | ? | ? | recon |
-| Aqua Travel | aquatravel.rs | sopstveni CMS | bus, avio, sopstveni | ? | ? | recon |
-| Filip Travel | filiptravel.rs | sopstveni CMS | bus, avio | ? | ? | recon |
-| Oktopod Travel | oktopod.rs | cloudhosting | bus, sopstveni | ? | ? | recon |
-| Felix Travel | felixtravel.rs | sopstveni CMS | bus, avio | ? | ? | recon |
-| Tim Travel | timtravel.rs | sopstveni CMS | bus, sopstveni | ? | ? | recon |
-| Sabra Travel | sabra.rs | sopstveni CMS | bus, avio | ? | ? | recon |
-| Grand Tours | grandtours.rs | sopstveni CMS | bus, sopstveni | ? | ? | recon |
-| Deus Travel | deustravel.rs | sopstveni CMS | sopstveni (Grčka) | ? | ? | recon |
-| Lider Travel | lidertravel.rs | sopstveni CMS | avio, bus | ? | ? | recon |
-| Belvi Travel | belvi.rs | sopstveni CMS | avio, bus | ? | ? | recon |
-| Olympic | olympic.rs | sopstveni CMS | bus, avio | ? | ? | recon |
-| Plana Travel | planatravel.rs | WordPress | bus, sopstveni | ? | ? | recon |
-| Feniks Tours | feniks-tours.rs | WordPress | bus, sopstveni | ? | ? | recon |
-| Euroturs | euroturs.rs | WordPress | bus, sopstveni | ? | ? | recon |
-| Viva Travel | vivatravel.rs | WordPress | bus, avio | ? | ? | recon |
-| Sole Azur | soleazur.rs | sopstveni CMS | bus | ? | ? | recon |
-| Amos Travel | amostravel.rs | sopstveni CMS | bus, sopstveni | ? | ? | recon |
-| Hedonic Travel | hedonictravel.rs | sopstveni CMS | bus, avio, sopstveni | ? | ? | recon |
-| Odeon Travel | odeontravel.rs | verovatno b2cservice | avio, bus | ? | ? | recon |
-| Argus Tours | argus.rs | sopstveni CMS | bus, transferi | ? | ? | recon |
-| Magic Travel | magictravel.rs | sopstveni CMS | avio, bus | ? | ? | recon |
-| Maestral | maestral.co.rs | sopstveni CMS | bus, izleti | ? | ? | recon |
-| Rapsody Travel | rapsodytravel.rs | sopstveni CMS | avio, mladi | ? | ? | recon |
-| Time Travel | timetravel.rs | sopstveni CMS | bus, avio | ? | ? | recon |
-| Online Travel | onlinetravel.rs | sopstveni CMS | mešano | ? | ? | recon |
+| Big Blue | bigblue.rs | TourVisio | bus, avio, sopstveni, ture | ✗ blokira | ? | **isključen** |
+| Kon Tiki | kontiki.rs | TourVisio | avio, sopstveni, ture, daleke | ✗ blokira | ? | talas 3 |
+| 1A Travel | 1atravel.rs | Onesystem | avio (čarter) | dozvoljava | ? | talas 3 |
+| Fibula Air Travel | fibula.rs | sopstvena (Peakwork) | avio (čarter), sopstveni | ✗ blokira | ? | **isključen** |
+| Travelland | travelland.rs | sopstveni CMS | avio, sopstveni, ture | ? | ? | talas 2 |
+| Aqua Travel | aquatravel.rs | sopstveni CMS (WordPress) | bus, avio, sopstveni | dozvoljava | ? | talas 1 |
+| Filip Travel | filiptravel.rs | TourVisio | bus, avio | ✗ blokira | ? | **isključen** |
+| Oktopod Travel | oktopod.rs | cloudhosting | bus, sopstveni | ? | ? | talas 2 |
+| Felix Travel | felixtravel.rs | sopstveni CMS | bus, avio | ? | ? | talas 2 |
+| Tim Travel | timtravel.rs | sopstveni CMS | bus, sopstveni | ? | ? | talas 2 |
+| Sabra Travel | sabra.rs | sopstveni CMS | bus, avio | ? | ? | talas 2 |
+| Grand Tours | grandtours.rs | sopstveni CMS | bus, sopstveni | ? | ? | talas 2 |
+| Deus Travel | deustravel.rs | WordPress + Elementor | sopstveni (Grčka) | ✗ blokira | ? | **isključen** |
+| Lider Travel | lidertravel.rs | sopstveni CMS | avio, bus | ? | ? | talas 2 |
+| Belvi Travel | belvi.rs | WordPress + WPBakery | avio, bus | ? | ? | talas 2 |
+| Olympic | olympic.rs | sopstveni CMS | bus, avio | ? | ? | talas 3 |
+| Plana Travel | planatravel.rs | WebKlik CMS | bus, sopstveni | dozvoljava | ? | talas 1 |
+| Feniks Tours | feniks-tours.rs | WordPress (AIOSEO) | bus, sopstveni | ✗ blokira | ? | **isključen** |
+| Euroturs | euroturs.rs | sopstveni/custom | bus, sopstveni | dozvoljava | ? | talas 2 |
+| Viva Travel | vivatravel.rs | WordPress | bus, avio | ✗ blokira | ? | **isključen** |
+| Sole Azur | soleazur.rs | sopstveni CMS | bus | dozvoljava | ? | **gotov adapter** |
+| Amos Travel | amostravel.rs | WordPress | bus, sopstveni | ? | ? | talas 2 |
+| Hedonic Travel | hedonictravel.rs | sopstveni CMS | bus, avio, sopstveni | ? (nedohvaćen) | ? | talas 2 |
+| Odeon Travel | odeontravel.rs | TourVisio | avio, bus | ✗ blokira | ? | **isključen** |
+| Argus Tours | argus.rs | sopstveni CMS | bus, transferi | ? | ? | nije reconovan |
+| Magic Travel | magictravel.rs | sopstveni CMS | avio, bus | ? | ? | talas 2 |
+| Maestral | maestral.co.rs | WordPress | bus, izleti | dozvoljava (eksplicitno ClaudeBot) | ? | talas 1 |
+| Rapsody Travel | rapsodytravel.rs | sopstveni CMS | avio, mladi | ? | ? | talas 2 |
+| Time Travel | timetravel.rs | sopstveni CMS (CipeeCMS) | bus, avio | ? | ? | talas 3 |
+| Online Travel | onlinetravel.rs | WordPress | mešano | ? | ? | talas 1 |
 
 ## Kandidati — samo prevoz (TRANSPORT)
 
 | Izvor | Domen | Napomena |
 |---|---|---|
 | Polazak | polazak.rs | prodaja autobuskih karata, ima strukturisanu pretragu po relaciji i datumu |
-| BalkanViator | balkanviator.com | red vožnje + karte, regionalno pokrivanje |
+| BalkanViator | balkanviator.com | red vožnje + karte, regionalno pokrivanje — **isključen**, robots.txt blokira ClaudeBot |
 | Red vožnje | redvoznje.net | samo red vožnje, bez cena |
 | Teroplan | teroplan.rs | isti vlasnik kao BalkanViator/Vollo, moguć partnerski pristup |
 | FlixBus | flixbus.rs | ima javni GTFS i partnerski program |
-| Lasta | lasta.rs | domaći i međunarodni linijski prevoz |
+| Lasta | lasta.rs | domaći i međunarodni linijski prevoz — **isključen**, robots.txt blokira ClaudeBot |
 | Niš Ekspres | nis-ekspres.rs | jug Srbije |
 | Air Serbia | airserbia.com | avio, ToS verovatno zabranjuje skreping — ide preko partnerskog programa ili nikako |
 | Srbijavoz | srbijavoz.rs | voz |
