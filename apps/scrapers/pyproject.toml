@@ -6,8 +6,9 @@ build-backend = "hatchling.build"
 name = "travelscrape"
 version = "0.1.0"
 description = "Skreperi srpskih turističkih agencija za Kuda putujem metapretraživač"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
+    "travelcore",
     "httpx[http2]>=0.27",
     "selectolax>=0.3.21",
     "pydantic>=2.7",
@@ -40,7 +41,7 @@ packages = ["src/travelscrape"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
@@ -52,6 +53,6 @@ asyncio_mode = "auto"
 addopts = "-q"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 ignore_missing_imports = true
