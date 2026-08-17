@@ -430,6 +430,11 @@ def parse_price_page(html: str, default_year: int = 2026) -> list[OfferIn]:
     destination = "Grčka"
     year = default_year
 
+    if tree.root is None:
+        # Prazan ili nevalidan HTML — skrepovan sadrzaj je neprijateljski ulaz
+        # (pravilo 8), ne pucati nego vratiti prazno kao i kad naslov nedostaje.
+        return offers
+
     for node in tree.root.traverse(include_text=False):
         if node.tag not in ("h2", "table"):
             continue
