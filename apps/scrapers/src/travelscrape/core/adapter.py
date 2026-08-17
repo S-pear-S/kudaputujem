@@ -9,8 +9,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, ClassVar
 
+from travelcore.models import OfferIn, RawOffer
+
 from .fetch import HttpFetcher
-from .models import OfferIn, RawOffer
 
 
 class BaseAdapter(ABC):

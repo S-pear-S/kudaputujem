@@ -15,8 +15,7 @@ import shutil
 import subprocess
 
 import pytest
-
-from travelscrape.normalize.text import normalize
+from travelcore.normalize.text import normalize
 
 CASES = [
     "Čačak",

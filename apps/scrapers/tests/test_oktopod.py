@@ -20,10 +20,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-
-from travelscrape.adapters.oktopod import _extract_ac_surcharge as extract_ac_surcharge
-from travelscrape.adapters.oktopod import detail_urls_from_sitemap, parse_hotel_page
-from travelscrape.core.enums import (
+from travelcore.enums import (
     BoardType,
     Payable,
     PriceSlot,
@@ -32,6 +29,9 @@ from travelscrape.core.enums import (
     SurchargeUnit,
     TransportType,
 )
+
+from travelscrape.adapters.oktopod import _extract_ac_surcharge as extract_ac_surcharge
+from travelscrape.adapters.oktopod import detail_urls_from_sitemap, parse_hotel_page
 
 FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "oktopod" / "putovanje_vila_penny.html"
 URL = "https://www.oktopod.rs/sr/putovanje/vila-penny-hanioti/8339"

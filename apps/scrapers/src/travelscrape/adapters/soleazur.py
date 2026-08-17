@@ -75,9 +75,7 @@ from decimal import Decimal, InvalidOperation
 from typing import ClassVar
 
 from selectolax.parser import HTMLParser, Node
-
-from travelscrape.core import BaseAdapter, HttpFetcher, register
-from travelscrape.core.enums import (
+from travelcore.enums import (
     AccommodationKind,
     BoardType,
     PriceSlot,
@@ -85,9 +83,11 @@ from travelscrape.core.enums import (
     ProductKind,
     TransportType,
 )
-from travelscrape.core.models import AccommodationIn, DepartureIn, OfferIn, PriceIn
-from travelscrape.normalize.rooms import parse_room_code
-from travelscrape.normalize.text import slugify
+from travelcore.models import AccommodationIn, DepartureIn, OfferIn, PriceIn
+from travelcore.normalize.rooms import parse_room_code
+from travelcore.normalize.text import slugify
+
+from travelscrape.core import BaseAdapter, HttpFetcher, register
 
 _BASE = "https://soleazur.rs"
 _PRICES_URL = f"{_BASE}/lm/display_prices.php"

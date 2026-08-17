@@ -6,20 +6,19 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-
-from travelscrape.core.enums import BoardType, TransportType
-from travelscrape.normalize.board import parse_board
-from travelscrape.normalize.dates import parse_date, parse_date_range, parse_duration
-from travelscrape.normalize.money import detect_currency, parse_amount, parse_price
-from travelscrape.normalize.rooms import parse_child_ages, parse_room_code
-from travelscrape.normalize.text import (
+from travelcore.enums import BoardType, TransportType
+from travelcore.normalize.board import parse_board
+from travelcore.normalize.dates import parse_date, parse_date_range, parse_duration
+from travelcore.normalize.money import detect_currency, parse_amount, parse_price
+from travelcore.normalize.rooms import parse_child_ages, parse_room_code
+from travelcore.normalize.text import (
     canonical_accommodation_name,
     from_cyrillic,
     normalize,
     slugify,
     strip_stars,
 )
-from travelscrape.normalize.transport import parse_transport, parse_transport_options
+from travelcore.normalize.transport import parse_transport, parse_transport_options
 
 # ---------------------------------------------------------------- text
 

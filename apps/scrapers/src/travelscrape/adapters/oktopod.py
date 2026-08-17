@@ -70,9 +70,7 @@ from decimal import Decimal, InvalidOperation
 from typing import ClassVar
 
 from selectolax.parser import HTMLParser, Node
-
-from travelscrape.core import BaseAdapter, HttpFetcher, register
-from travelscrape.core.enums import (
+from travelcore.enums import (
     AccommodationKind,
     BoardType,
     Payable,
@@ -84,9 +82,11 @@ from travelscrape.core.enums import (
     SurchargeUnit,
     TransportType,
 )
-from travelscrape.core.models import AccommodationIn, DepartureIn, OfferIn, PriceIn, SurchargeIn
-from travelscrape.normalize.dates import parse_date_range
-from travelscrape.normalize.text import slugify
+from travelcore.models import AccommodationIn, DepartureIn, OfferIn, PriceIn, SurchargeIn
+from travelcore.normalize.dates import parse_date_range
+from travelcore.normalize.text import slugify
+
+from travelscrape.core import BaseAdapter, HttpFetcher, register
 
 _BASE = "https://www.oktopod.rs"
 _SITEMAP_URL = f"{_BASE}/sitemap.xml"
