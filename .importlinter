@@ -1,0 +1,24 @@
+[importlinter]
+root_packages =
+    travelcore
+    travelscrape
+include_external_packages = True
+
+[importlinter:contract:travelcore-je-cist]
+name = travelcore ne sme da zavisi od scraping biblioteka
+type = forbidden
+source_modules = travelcore
+forbidden_modules =
+    httpx
+    selectolax
+    typer
+    structlog
+    tenacity
+    playwright
+    rich
+
+[importlinter:contract:smer-zavisnosti]
+name = travelcore ne sme da zna za travelscrape
+type = forbidden
+source_modules = travelcore
+forbidden_modules = travelscrape
