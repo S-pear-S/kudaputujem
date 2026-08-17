@@ -1,242 +1,209 @@
-"""Testovi za soleazur.rs adapter.
+"""Testovi za soleazur adapter, nad fixture-om snimljenim sa pravog sajta.
 
-Testiraju parsiranje cena i strukture bez HTTP poziva.
-Koristimo HTML fixture koji odgovara strukturi /lm/display_prices.php.
+Fixture: `tests/fixtures/soleazur/display_prices.html`, snimljen 16.08.2026.
+kroz Chrome, iz DOM-a. Sve vrednosti u ovim testovima su doslovno sa sajta.
 
-NAPOMENA: Fixture je konstruisan na osnovu markdown-a koji WebFetch vraća.
-Selektori (h2, thead, tbody) su PRETPOSTAVLJENI i treba ih verifikovati
-lokalno pokretanjem: travelscrape snapshot soleazur-grcka https://soleazur.rs/lm/display_prices.php
+Testira se ono što ruši naivni parser:
+  - `rowspan` na imenu objekta (redovi nastavka imaju ćeliju manje)
+  - kolone sa jednim prevozom (bez `/`) uz kolone sa dva
+  - `/`, prazna ćelija i `x€` kao odsustvo cene
+  - puna cena niža od akcijske
 """
 
 from __future__ import annotations
 
+import pathlib
 from datetime import date
 from decimal import Decimal
 
 import pytest
 
-from travelscrape.adapters.soleazur import (
-    _dates_from_header,
-    _parse_price_cell,
-    _parse_room,
-    _transports_from_header,
-    _PeriodCol,
-    parse_price_page,
+from travelscrape.adapters.soleazur import parse_price_page
+from travelscrape.core.enums import (
+    BoardType,
+    PriceSlot,
+    PricingBasis,
+    ProductKind,
+    TransportType,
 )
-from travelscrape.core.enums import TransportType
 
-# ---------------------------------------------------------------------------
-# Unit testovi parsiranja
-# ---------------------------------------------------------------------------
+FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "soleazur" / "display_prices.html"
 
 
-class TestTransportFromHeader:
-    def test_sopstveni_bus(self):
-        result = _transports_from_header("11d/10n (28.08.-07.09.) Sopstveni/Bus")
-        assert result == [TransportType.OWN, TransportType.BUS]
-
-    def test_avio_only(self):
-        result = _transports_from_header("11d/10n (22.08.-01.09.) Avio")
-        assert result == [TransportType.PLANE]
-
-    def test_lowercase(self):
-        result = _transports_from_header("sopstveni/bus")
-        assert TransportType.OWN in result
-        assert TransportType.BUS in result
+@pytest.fixture(scope="module")
+def offers():
+    return parse_price_page(FIXTURE.read_text(encoding="utf-8"))
 
 
-class TestDatesFromHeader:
-    def test_standard(self):
-        result = _dates_from_header("11d/10n (28.08.-07.09.) Sopstveni/Bus", 2026)
-        assert result == (date(2026, 8, 28), date(2026, 9, 7))
-
-    def test_dec_to_jan(self):
-        result = _dates_from_header("25.12.-04.01.", 2026)
-        assert result == (date(2026, 12, 25), date(2027, 1, 4))
-
-    def test_no_dates(self):
-        result = _dates_from_header("Objekat", 2026)
-        assert result is None
+def _find(offers, accommodation: str, transport: TransportType):
+    for offer in offers:
+        if offer.accommodation.name == accommodation and offer.transport_type is transport:
+            return offer
+    return None
 
 
-class TestParsePriceCell:
-    def _col(self, transports=None) -> _PeriodCol:
-        return _PeriodCol(
-            start_date=date(2026, 8, 28),
-            end_date=date(2026, 9, 7),
-            nights=10,
-            transports=transports or [TransportType.OWN, TransportType.BUS],
-        )
-
-    def test_sopstveni_bus_with_promo(self):
-        entries = _parse_price_cell("209€ (235€) / 275€ (305€)", self._col())
-        assert len(entries) == 2
-        assert entries[0].transport == TransportType.OWN
-        assert entries[0].amount == Decimal("209")
-        assert entries[0].original_amount == Decimal("235")
-        assert entries[0].is_promo is True
-        assert entries[1].transport == TransportType.BUS
-        assert entries[1].amount == Decimal("275")
-        assert entries[1].original_amount == Decimal("305")
-
-    def test_unavailable_slash(self):
-        entries = _parse_price_cell("/", self._col())
-        assert entries == []
-
-    def test_empty_cell(self):
-        entries = _parse_price_cell("", self._col())
-        assert entries == []
-
-    def test_x_unavailable(self):
-        entries = _parse_price_cell("x€ (235€) / 275€ (305€)", self._col())
-        # "x€" nije broj, preskačemo
-        assert len(entries) == 1
-        assert entries[0].transport == TransportType.BUS
-
-    def test_no_promo(self):
-        entries = _parse_price_cell("195€ / 259€", self._col())
-        assert len(entries) == 2
-        assert entries[0].original_amount is None
-        assert entries[0].is_promo is False
+# --------------------------------------------------------------- osnovno
 
 
-class TestParseRoom:
-    def test_studio_1_3_plus_1(self):
-        code, adults, extra = _parse_room("Studio 1/3+1 dvorište")
-        assert code == "1/3+1"
-        assert adults == 3
-        assert extra == 1
-
-    def test_standard_1_2(self):
-        code, adults, extra = _parse_room("Studio 1/2")
-        assert code == "1/2"
-        assert adults == 2
-        assert extra == 0
-
-    def test_mezoneta_1_4(self):
-        code, adults, extra = _parse_room("Mezoneta 1/4")
-        assert code == "1/4"
-        assert adults == 4
-        assert extra == 0
-
-    def test_no_standard_code(self):
-        # Hoteli ponekad imaju "Superior" bez 1/N šifre
-        code, adults, extra = _parse_room("Superior")
-        assert adults == 2  # fallback
+def test_parsira_obe_destinacije(offers):
+    destinations = {offer.destination_raw for offer in offers}
+    assert destinations == {"Neos Marmaras", "Kefalonija"}
 
 
-# ---------------------------------------------------------------------------
-# Integralni test parsiranja HTML stranice
-# ---------------------------------------------------------------------------
-
-FIXTURE_HTML = """
-<!DOCTYPE html>
-<html>
-<body>
-<h2>Neos Marmaras leto 2026</h2>
-<table>
-  <thead>
-    <tr>
-      <th>Objekat</th>
-      <th>Soba</th>
-      <th>11d/10n (28.08.-07.09.) Sopstveni/Bus</th>
-      <th>11d/10n (07.09.-17.09.) Sopstveni/Bus</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Ridos house</td>
-      <td>Studio 1/3+1 dvorište D1</td>
-      <td>209€ (235€) / 275€ (305€)</td>
-      <td>/</td>
-    </tr>
-    <tr>
-      <td></td>
-      <td>Mezoneta 1/4</td>
-      <td>265€ / 335€</td>
-      <td>215€ (255€) / 285€ (335€)</td>
-    </tr>
-  </tbody>
-</table>
-
-<h2>Nei Pori leto 2026</h2>
-<table>
-  <thead>
-    <tr>
-      <th>Objekat</th>
-      <th>Soba</th>
-      <th>11d/10n (23.08.-02.09.) Sopstveni/Bus</th>
-      <th>11d/10n (02.09.-12.09.) Sopstveni/Bus</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Vila Filio</td>
-      <td>Studio 1/2</td>
-      <td>229€ (289€) / 295€ (369€)</td>
-      <td>195€ (229€) / 259€ (309€)</td>
-    </tr>
-  </tbody>
-</table>
-</body>
-</html>
-"""
+def test_godina_se_cita_iz_naslova(offers):
+    assert all(dep.start_date.year == 2026 for offer in offers for dep in offer.departures)
 
 
-class TestParsePricePage:
-    def test_finds_two_offers(self):
-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
-        assert len(offers) == 2
+def test_svaka_ponuda_je_aranzman_sa_smestajem(offers):
+    assert all(offer.product_kind is ProductKind.PACKAGE for offer in offers)
+    assert all(offer.accommodation is not None for offer in offers)
 
-    def test_ridos_house_offer(self):
-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
-        ridos = next(o for o in offers if "Ridos" in o.title)
-        assert ridos.destination_raw == "Neos Marmaras"
-        assert ridos.country_raw == "Grčka"
-        assert ridos.accommodation is not None
-        assert ridos.accommodation.name == "Ridos house"
 
-    def test_ridos_departures_count(self):
-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
-        ridos = next(o for o in offers if "Ridos" in o.title)
-        # Studio 1/3+1: period1 ima OWN+BUS, period2 nema ("/")
-        # Mezoneta 1/4: period1 ima OWN+BUS, period2 ima OWN+BUS
-        # Ukupno: 2 + 4 = 6 departure redova
-        assert len(ridos.departures) == 6
+def test_usluga_je_najam(offers):
+    # Stranica hotela: "smeštaj 10 noćenja (usluga najam)".
+    assert all(offer.board_type is BoardType.RO for offer in offers)
 
-    def test_dates_correct(self):
-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
-        ridos = next(o for o in offers if "Ridos" in o.title)
-        start_dates = {d.start_date for d in ridos.departures}
-        assert date(2026, 8, 28) in start_dates
 
-    def test_transport_types(self):
-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
-        ridos = next(o for o in offers if "Ridos" in o.title)
-        transports = {d.transport_type for d in ridos.departures}
-        assert TransportType.OWN in transports
-        assert TransportType.BUS in transports
+def test_cena_je_po_osobi(offers):
+    # Stranica hotela: "CENA ARANŽMANA PO OSOBI".
+    prices = [p for o in offers for d in o.departures for p in d.prices]
+    assert prices
+    assert all(p.slot is PriceSlot.ADULT for p in prices)
+    assert all(p.pricing_basis is PricingBasis.PER_PERSON_PER_STAY for p in prices)
 
-    def test_is_last_minute(self):
-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
-        for offer in offers:
-            for dep in offer.departures:
-                assert dep.is_last_minute is True
 
-    def test_promo_price(self):
-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
-        ridos = next(o for o in offers if "Ridos" in o.title)
-        promo_deps = [d for d in ridos.departures if d.prices and d.prices[0].is_promo]
-        # Studio i Mezoneta sa (regularnom) cenom
-        assert len(promo_deps) > 0
+# --------------------------------------------------------------- rowspan
 
-    def test_vila_filio_both_periods(self):
-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
-        vila = next(o for o in offers if "Vila Filio" in o.title)
-        # Studio 1/2: 2 perioda × 2 prevoza = 4 departures
-        assert len(vila.departures) == 4
 
-    def test_source_slug(self):
-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
-        for offer in offers:
-            assert offer.source_slug == "soleazur-grcka"
+def test_rowspan_ne_pomera_kolone(offers):
+    """Ridos house ima rowspan=3; sobe iz redova nastavka moraju imati tačne cene."""
+    offer = _find(offers, "Ridos house", TransportType.OWN)
+    assert offer is not None
+
+    # Mezoneta 1/4 je u DRUGOM redu, koji nema ćeliju objekta.
+    # Njena cena za sopstveni prevoz u prvom terminu je 265€.
+    departure = next(d for d in offer.departures if d.start_date == date(2026, 8, 28))
+    price = next(p for p in departure.prices if p.room_code == "1/4")
+    assert price.amount == Decimal("265")
+
+
+def test_sve_tri_sobe_ridos_house_su_pokupljene(offers):
+    codes = set()
+    for transport in (TransportType.OWN, TransportType.BUS):
+        offer = _find(offers, "Ridos house", transport)
+        if offer:
+            codes |= {p.room_code for d in offer.departures for p in d.prices}
+    assert codes == {"1/3+1", "1/4", "1/4+1"}
+
+
+def test_objekat_bez_rowspana_se_prepoznaje(offers):
+    """Vila Aggelos ima jednu sobu, pa ćelija objekta nema rowspan atribut.
+
+    Sve njene cene su `/` ili prazne, pa ponuda ne sme ni da nastane.
+    """
+    assert _find(offers, "Vila Aggelos", TransportType.OWN) is None
+    assert _find(offers, "Vila Aggelos", TransportType.PLANE) is None
+
+
+# --------------------------------------------------------------- cene i prevoz
+
+
+def test_dva_prevoza_u_istoj_celiji(offers):
+    """`209€ (235€) / 275€ (305€)` -> sopstveni 209, bus 275."""
+    own = _find(offers, "Ridos house", TransportType.OWN)
+    bus = _find(offers, "Ridos house", TransportType.BUS)
+    assert own is not None and bus is not None
+
+    def price_for(offer, start, code):
+        departure = next(d for d in offer.departures if d.start_date == start)
+        return next(p for p in departure.prices if p.room_code == code)
+
+    own_price = price_for(own, date(2026, 9, 7), "1/3+1")
+    bus_price = price_for(bus, date(2026, 9, 7), "1/3+1")
+
+    assert own_price.amount == Decimal("209")
+    assert own_price.original_amount == Decimal("235")
+    assert bus_price.amount == Decimal("275")
+    assert bus_price.original_amount == Decimal("305")
+
+
+def test_nepoznata_puna_cena_ne_obara_akcijsku(offers):
+    """`265€ (x€) / 335€` -> akcijska 265 bez pune cene."""
+    own = _find(offers, "Ridos house", TransportType.OWN)
+    departure = next(d for d in own.departures if d.start_date == date(2026, 8, 28))
+    price = next(p for p in departure.prices if p.room_code == "1/4")
+
+    assert price.amount == Decimal("265")
+    assert price.original_amount is None
+    assert price.is_promo is False
+
+
+def test_kolona_sa_jednim_prevozom(offers):
+    """Kefalonija ima kolone samo za avio; ćelija tada nema `/`."""
+    offer = _find(offers, "Andrew's studios", TransportType.PLANE)
+    assert offer is not None
+    departure = next(d for d in offer.departures if d.start_date == date(2026, 8, 25))
+    price = next(p for p in departure.prices if p.room_code == "1/2")
+    assert price.amount == Decimal("675")
+    assert departure.nights == 11  # "12 dana/11 noci"
+
+
+def test_razlicito_trajanje_po_koloni(offers):
+    offer = _find(offers, "Andrew's studios", TransportType.OWN)
+    departure = next(d for d in offer.departures if d.start_date == date(2026, 8, 22))
+    assert departure.nights == 10
+    assert departure.end_date == date(2026, 9, 1)
+
+
+def test_kosa_crta_ne_pravi_cenu(offers):
+    """Prvi termin za Ridos house 1/3+1 je `/` — ta soba ne sme biti u tom terminu."""
+    own = _find(offers, "Ridos house", TransportType.OWN)
+    departure = next(d for d in own.departures if d.start_date == date(2026, 8, 28))
+    assert all(p.room_code != "1/3+1" for p in departure.prices)
+
+
+def test_x_evra_se_preskace(offers):
+    """`x€ (x€)` za Andrew's studios 1/3 u trećoj koloni ne sme dati termin."""
+    offer = _find(offers, "Andrew's studios", TransportType.PLANE)
+    dates = {d.start_date for d in offer.departures}
+    assert date(2026, 8, 29) not in dates
+
+
+def test_puna_cena_niza_od_akcijske_nije_popust(offers):
+    """`619€ (585€)` je greška u podacima na sajtu; ne sme se označiti kao promo."""
+    offer = _find(offers, "Vila Zaharula, Lassi", TransportType.PLANE)
+    assert offer is not None
+    departure = next(d for d in offer.departures if d.start_date == date(2026, 8, 25))
+    price = next(p for p in departure.prices if p.room_code == "1/3")
+
+    assert price.amount == Decimal("619")
+    assert price.original_amount == Decimal("585")
+    assert price.is_promo is False
+
+
+# --------------------------------------------------------------- identitet
+
+
+def test_jedan_offer_po_prevozu(offers):
+    ids = {o.external_id for o in offers if o.accommodation.name == "Ridos house"}
+    assert ids == {"neos-marmaras-ridos-house__own", "neos-marmaras-ridos-house__bus"}
+
+
+def test_nema_dva_termina_sa_istim_datumima_u_istoj_ponudi(offers):
+    """Baza ima UNIQUE (offer_id, start_date, end_date, departure_place_raw)."""
+    for offer in offers:
+        keys = [(d.start_date, d.end_date, d.departure_place_raw) for d in offer.departures]
+        assert len(keys) == len(set(keys)), f"duplirani termin u {offer.external_id}"
+
+
+def test_external_id_je_stabilan():
+    """Dva parsiranja istog HTML-a daju iste identifikatore."""
+    html = FIXTURE.read_text(encoding="utf-8")
+    first = {o.external_id for o in parse_price_page(html)}
+    second = {o.external_id for o in parse_price_page(html)}
+    assert first == second
+
+
+def test_oznake_soba_prolaze_kroz_normalizator(offers):
+    codes = {p.room_code for o in offers for d in o.departures for p in d.prices}
+    assert codes <= {"1/2", "1/3", "1/3+1", "1/4", "1/4+1"}
