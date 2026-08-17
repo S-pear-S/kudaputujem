@@ -109,7 +109,7 @@ enum class SurchargeCode {
 
 enum class SurchargeKind { MANDATORY, OPTIONAL }
 
-enum class SurchargeUnit { PER_PERSON, PER_PERSON_PER_NIGHT, PER_UNIT, PER_BOOKING }
+enum class SurchargeUnit { PER_PERSON, PER_PERSON_PER_NIGHT, PER_UNIT, PER_UNIT_PER_NIGHT, PER_BOOKING }
 
 enum class Payable { IN_ADVANCE, ON_SITE }
 

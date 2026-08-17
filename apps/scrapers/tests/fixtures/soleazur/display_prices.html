@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="sr"><head><meta charset="utf-8"><title>Pregled Cena Hotela</title></head>
+<body>
+<!--
+  Fixture snimljen sa https://soleazur.rs/lm/display_prices.php dana 16.08.2026.
+  kroz pravi Chrome, iz DOM-a.
+
+  Sta je zadrzano DOSLOVNO: struktura tabele, klase, <br> u zaglavlju, rowspan,
+  <h6><a> za ime hotela, i svi tekstualni sadrzaji celija.
+
+  Sta je uklonjeno: href i src atributi (fixture ne sme da nosi zive URL-ove),
+  skripte i CSS koji je ubacila browser ekstenzija, i osam od deset sekcija
+  koje ponavljaju vec pokrivene obrasce.
+
+  Zadrzane su dve sekcije jer zajedno pokrivaju SVE strukturne slucajeve:
+
+  Neos Marmaras  - dve kolone, oba prevoza u istoj celiji (Sopstveni/Bus)
+                 - rowspan=3 na imenu objekta
+                 - celija "/" = nema ponude
+                 - "265€ (x€) / 335€" = puna cena nepoznata, bus bez zagrade
+
+  Kefalonija     - TRI kolone sa RAZLICITIM prevozom po koloni
+                 - razlicito trajanje po koloni (10 i 11 noci)
+                 - jedan prevoz po celiji, dakle bez "/" razdvajanja
+                 - "x€ (x€)" = obe cene nepoznate
+                 - "619€ (585€)" = puna cena NIZA od akcijske, greska u podacima
+                   na sajtu; adapter ne sme da pretpostavi original > amount
+-->
+<h2>Neos Marmaras leto 2026</h2>
+<table class="table table-bordered table-sm">
+<thead class="table-light"><tr><th>Objekat</th><th>Soba</th><th>11 dana/10 noci<br>Termin boravka 28.08.-07.09.<br>Sopstveni prevoz/Bus prevoz</th><th>11 dana/10 noci<br>Termin boravka 07.09.-17.09.<br>Sopstveni prevoz/Bus prevoz</th></tr></thead>
+<tbody>
+<tr><td rowspan="3"><h6><a>Ridos house</a></h6></td><td>Studio 1/3+1 dvoriste D1 i D2</td><td>/</td><td>209€ (235€) / 275€ (305€)</td></tr>
+<tr><td>Mezoneta 1/4</td><td>265€ (x€) / 335€</td><td>/</td></tr>
+<tr><td>Mezoneta 1/4+1</td><td>215€ (255€) / 285€ (335€)</td><td>/</td></tr>
+</tbody></table>
+
+<h2>Kefalonija letovanje 2026</h2>
+<table class="table table-bordered table-sm">
+<thead class="table-light"><tr><th>Objekat</th><th>Soba</th><th>11 dana/10 noci<br>Termin boravka 22.08.-01.09.<br>Sopstveni prevoz</th><th>12 dana/11 noci<br>Termin boravka 25.08.-05.09.<br>Avio prevoz</th><th>11 dana/10 noci<br>Termin boravka 29.08.-08.09.<br>Avio prevoz</th></tr></thead>
+<tbody>
+<tr><td rowspan="2"><h6><a>Andrew's studios</a></h6></td><td>Studio 1/2</td><td>359€ (449€)</td><td>675€ (759€)</td><td>/</td></tr>
+<tr><td>Studio 1/3</td><td>269€ (339€)</td><td>585€ (689€)</td><td>x€ (x€)</td></tr>
+<tr><td rowspan="2"><h6><a>Vila Eleanna</a></h6></td><td>Apartman 1/3</td><td>/</td><td>549€ (649€)</td><td>/</td></tr>
+<tr><td>Apartman 1/3+1</td><td>/</td><td>499€ (589€)</td><td>/</td></tr>
+<tr><td rowspan="2"><h6><a>Vila Zaharula, Lassi</a></h6></td><td>Studio 1/2</td><td>/</td><td>675€ (759€)</td><td>/</td></tr>
+<tr><td>Studio 1/3</td><td>279€ (349€)</td><td>619€ (585€)</td><td>585€ (659€)</td></tr>
+<tr><td><h6><a>Vila Aggelos</a></h6></td><td>Studio 1/2</td><td>/</td><td>/</td><td></td></tr>
+</tbody></table>
+</body></html>

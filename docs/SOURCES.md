@@ -1,5 +1,12 @@
 # Katalog izvora
 
+> **Odluka 16.08.2026.** Devet izvora čiji `robots.txt` blokira skrepere je **trajno van
+> opsega**: `bigblue.rs`, `fibula.rs`, `filiptravel.rs`, `odeontravel.rs`, `deustravel.rs`,
+> `feniks-tours.rs`, `vivatravel.rs`, `balkanviator.com`, `lasta.rs`.
+> Ne pišu se adapteri, **ne šalju im se mejlovi**, ne traže se zaobilazni putevi.
+> Projekat koristi samo ono do čega se dolazi jednostavno i sa sajta same agencije.
+> Lista se može revidirati kad sajt poraste; do tada se ne dira.
+
 Status: **recon završen za 33 sajta** — vidi [docs/recon/](recon/README.md). Kolone `robots` i `ToS` se popunjavaju tek posle ručne provere, i izvor se
 ne uključuje dok obe nisu zelene.
 

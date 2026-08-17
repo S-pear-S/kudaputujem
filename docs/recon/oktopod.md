@@ -77,3 +77,35 @@ _nije utvrđeno u ovom reconu_
 - WebFetch oktopod.rs/robots.txt (404)
 - WebFetch /sr/nei-pori/453
 - WebFetch /sr/putovanje/vila-penny-hanioti/8339
+
+
+---
+
+## Dopuna 16.08.2026. — fixture snimljen
+
+Fixture: `apps/scrapers/tests/fixtures/oktopod/putovanje_vila_penny.html`
+Izvor: `https://www.oktopod.rs/sr/putovanje/vila-penny-hanioti/8339`
+
+**Ispravka ranijeg nalaza:** dve `table.CSSTableGenerator` na stranici NISU dva prevoza
+nego dve DUŽINE boravka — 10 noći i 7 noći. Obe nose naslov
+`PAKET ARANŽMAN (apartmanski smeštaj i autobuski prevoz)`, dakle obe su BUS.
+Cena za sopstveni prevoz se ne objavljuje u tabeli; dobija se kroz formu
+(`Tip prevoza: Agencijski prevoz (autobus) / Sopstveni prevoz`).
+
+Oblik tabele:
+
+```
+red 0   <td colspan=N> naslov paketa
+red 1   <td rowspan=3>Struktura</td> <td rowspan=3>Broj pomoćnih ležaja</td>
+        <td rowspan=3>Broj plativih osoba</td> <td colspan=M>PERIOD BORAVKA / BROJ NOĆENJA</td>
+red 2   broj noćenja po periodu
+red 3   datumi, oblik "20.05. 30.05." — dva datuma, BEZ crtice između
+red 4+  struktura, pomoćni ležaji, plative osobe, pa cena po periodu
+```
+
+**`Broj plativih osoba` je najvredniji podatak na celom sajtu.** Za `1/3+1 STD` piše `4`,
+što znači da se cena množi sa 4. Kapacitet se ne mora izvoditi iz oznake sobe —
+agencija ga je već objavila.
+
+Ostalo: `-` u koloni pomoćnih ležaja znači nula; `*` iza cene je uslovan period
+(fusnota ispod tabele); `1/2 STD RENOV*` — tu je zvezdica deo imena strukture, ne cene.

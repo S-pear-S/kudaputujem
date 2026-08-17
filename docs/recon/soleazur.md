@@ -84,3 +84,27 @@ Robots.txt potpuno otvoren. display_prices.php vraca strukturisanu tabelu (objek
 - WebFetch robots.txt
 - WebFetch /last-minute-grcka
 - WebFetch /lm/display_prices.php
+
+
+---
+
+## Dopuna 16.08.2026. — fixture i adapter
+
+Fixture: `apps/scrapers/tests/fixtures/soleazur/display_prices.html`, snimljen iz DOM-a.
+Adapter: `apps/scrapers/src/travelscrape/adapters/soleazur.py`, 19 testova nad fixture-om.
+
+Strukturni detalji koje naivni parser promaši:
+
+- **`rowspan` na imenu objekta.** Redovi posle prvog imaju jednu ćeliju MANJE.
+  Čitanje `cells[0]` kao objekta na tim redovima pročita sobu, a kao sobu — cenu.
+- **Ime objekta je u `<h6><a>` unutar `td[rowspan]`**, nije goli tekst ćelije.
+- **Broj prevoza po koloni nije konstantan.** Halkidiki: `Sopstveni prevoz/Bus prevoz`
+  (dve cene, razdvojene sa `/`). Kefalonija: kolone samo `Avio prevoz` (jedna cena, bez `/`).
+- **Različito trajanje po koloni** u istoj tabeli: `11 dana/10 noci` i `12 dana/11 noci`.
+- **`619€ (585€)`** — puna cena niža od akcijske. Greška u podacima na sajtu, javlja se.
+  Ne pretpostavljati `original > amount`.
+- **`h2` je destinacija, `h6` je hotel.** `css("h2, table")` u selectolax NE vraća redosled
+  dokumenta nego prvo sve `h2` pa sve `table`; mora `root.traverse()`.
+
+Jedna agencijska ponuda se deli na dve naše (`__own`, `__bus`) jer `departure` ima
+UNIQUE `(offer_id, start_date, end_date, departure_place_raw)` bez `transport_type`.
