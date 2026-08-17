@@ -7,7 +7,8 @@ Adapter zna HTML/JSON format sajta, ali NE zna za bazu.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator, ClassVar
+from collections.abc import AsyncGenerator
+from typing import ClassVar
 
 from travelcore.models import OfferIn, RawOffer
 

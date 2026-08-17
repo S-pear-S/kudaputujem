@@ -19,7 +19,8 @@ from travelcore.models import OfferIn, RunSummary
 from .adapter import BaseAdapter
 from .fetch import HttpFetcher, RobotsDisallowedError
 from .ingest import IngestClient
-from .settings import Settings, settings as default_settings
+from .settings import Settings
+from .settings import settings as default_settings
 
 log = logging.getLogger(__name__)
 

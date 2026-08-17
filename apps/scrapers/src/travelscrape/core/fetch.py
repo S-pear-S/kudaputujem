@@ -10,8 +10,8 @@ import asyncio
 import ipaddress
 import logging
 import socket
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 from urllib.robotparser import RobotFileParser
 
 import httpx
@@ -22,7 +22,8 @@ from tenacity import (
     wait_exponential,
 )
 
-from .settings import Settings, settings as default_settings
+from .settings import Settings
+from .settings import settings as default_settings
 
 log = logging.getLogger(__name__)
 
@@ -98,9 +99,9 @@ class _RobotsCache:
             robots_url = f"{base}/robots.txt"
             try:
                 resp = await client.get(robots_url, follow_redirects=True)
-                parser = RobotFileParser()
-                parser.parse(resp.text.splitlines())
-                self._cache[base] = parser
+                new_parser = RobotFileParser()
+                new_parser.parse(resp.text.splitlines())
+                self._cache[base] = new_parser
                 log.debug("robots.txt ucitan: %s", robots_url)
             except Exception as exc:
                 log.debug("robots.txt nije dostupan za %s: %s", base, exc)
@@ -196,8 +197,8 @@ class HttpFetcher:
         url: str,
         *,
         check_robots: bool = False,
-        params: dict | None = None,
-        headers: dict | None = None,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         """GET sa rate limitom, SSRF zastitom i opcionom robots.txt proverom."""
         assert self._client is not None, "HttpFetcher mora biti korisćen kao context manager"
@@ -206,9 +207,8 @@ class HttpFetcher:
         limiter = self._get_limiter(host)
 
         async with limiter.throttle():
-            if check_robots:
-                if not await self._robots.is_allowed(url, self._client):
-                    raise RobotsDisallowedError(f"robots.txt zabranjuje: {url}")
+            if check_robots and not await self._robots.is_allowed(url, self._client):
+                raise RobotsDisallowedError(f"robots.txt zabranjuje: {url}")
 
             resp = await self._do_get(url, params=params, headers=headers)
             if resp.status_code == 429:
@@ -244,8 +244,8 @@ class HttpFetcher:
     async def _do_get(
         self,
         url: str,
-        params: dict | None = None,
-        headers: dict | None = None,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         assert self._client is not None
         log.debug("GET %s", url)

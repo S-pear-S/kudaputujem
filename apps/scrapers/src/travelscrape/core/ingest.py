@@ -6,11 +6,13 @@ Skreper NE zna za bazu — sve ide kroz ovaj klijent.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import httpx
 from travelcore.models import IngestBatch, IngestResult, OfferIn, RunSummary
 
-from .settings import Settings, settings as default_settings
+from .settings import Settings
+from .settings import settings as default_settings
 
 log = logging.getLogger(__name__)
 
@@ -90,11 +92,12 @@ class IngestClient:
 
     # -- interni pomocnici -----------------------------------------------------
 
-    def _post(self, path: str, body: dict) -> dict:
+    def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         assert self._client is not None, "IngestClient mora biti koriscen kao context manager"
         resp = self._client.post(path, json=body)
         if not resp.is_success:
             raise RuntimeError(
                 f"API greska {resp.status_code} na {path}: {resp.text[:200]}"
             )
-        return resp.json()
+        data: dict[str, Any] = resp.json()
+        return data

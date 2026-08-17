@@ -364,7 +364,9 @@ def parse_hotel_page(html: str, url: str, reference: date | None = None) -> list
             if period is None:
                 continue
             prices = [
-                row[index] for row in room_rows if index < len(row) and row[index] is not None
+                cell
+                for row in room_rows
+                if index < len(row) and (cell := row[index]) is not None
             ]
             if not prices:
                 continue
