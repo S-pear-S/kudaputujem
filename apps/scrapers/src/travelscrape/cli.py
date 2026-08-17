@@ -20,6 +20,7 @@ import logging
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 import httpx
 import typer
@@ -28,14 +29,8 @@ from rich.table import Table
 
 # Uvoz adaptera okida @register dekoratore.
 import travelscrape.adapters  # noqa: F401
-from travelscrape.core import fetch as fetch_module
 from travelscrape.core import registry
-from travelscrape.core.fetch import (
-    USER_AGENT,
-    HttpFetcher,
-    RobotsDisallowedError,
-    SsrfError,
-)
+from travelscrape.core.fetch import HttpFetcher, SsrfError
 from travelscrape.core.pipeline import PipelineRunner
 from travelscrape.core.settings import settings
 
@@ -180,7 +175,7 @@ def recon(
     """Profilisati sajt i zapisati docs/recon/<slug>.md."""
     console.print(f"Recon za [bold]{slug}[/bold] ({base_url})...")
 
-    async def _do_recon() -> dict:
+    async def _do_recon() -> dict[str, Any]:
         async with HttpFetcher(allowed_domains=None) as fetcher:
             return await _recon_site(fetcher, base_url)
 
@@ -197,9 +192,9 @@ def recon(
     console.print(f"Zapisano: [bold]{out_path}[/bold]")
 
 
-async def _recon_site(fetcher: HttpFetcher, base_url: str) -> dict:
+async def _recon_site(fetcher: HttpFetcher, base_url: str) -> dict[str, Any]:
     """Prikuplja info o sajtu: robots, sitemap, framework, API endpoints."""
-    result: dict = {
+    result: dict[str, Any] = {
         "base_url": base_url,
         "robots_txt": None,
         "sitemap_urls": [],
@@ -273,7 +268,7 @@ async def _recon_site(fetcher: HttpFetcher, base_url: str) -> dict:
     return result
 
 
-def _render_recon_md(slug: str, base_url: str, data: dict) -> str:
+def _render_recon_md(slug: str, base_url: str, data: dict[str, Any]) -> str:
     lines = [
         f"# Recon: {slug}",
         "",
@@ -358,7 +353,9 @@ def replay(
 
     Zahteva /internal/raw-documents endpoint koji još nije implementiran.
     """
-    console.print("[yellow]replay nije još implementiran (čeka /internal/raw-documents endpoint)[/yellow]")
+    console.print(
+        "[yellow]replay nije još implementiran (čeka /internal/raw-documents endpoint)[/yellow]"
+    )
     raise typer.Exit(1)
 
 
@@ -371,7 +368,9 @@ def diff_raw(
 
     Zahteva /internal/raw-documents endpoint koji još nije implementiran.
     """
-    console.print("[yellow]diff-raw nije još implementiran (čeka /internal/raw-documents endpoint)[/yellow]")
+    console.print(
+        "[yellow]diff-raw nije još implementiran (čeka /internal/raw-documents endpoint)[/yellow]"
+    )
     raise typer.Exit(1)
 
 
