@@ -17,15 +17,15 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-
-from travelscrape.adapters.soleazur import parse_price_page
-from travelscrape.core.enums import (
+from travelcore.enums import (
     BoardType,
     PriceSlot,
     PricingBasis,
     ProductKind,
     TransportType,
 )
+
+from travelscrape.adapters.soleazur import parse_price_page
 
 FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "soleazur" / "display_prices.html"
 

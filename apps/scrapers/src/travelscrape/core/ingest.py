@@ -8,8 +8,8 @@ from __future__ import annotations
 import logging
 
 import httpx
+from travelcore.models import IngestBatch, IngestResult, OfferIn, RunSummary
 
-from .models import IngestBatch, IngestResult, OfferIn, RunSummary
 from .settings import Settings, settings as default_settings
 
 log = logging.getLogger(__name__)

@@ -14,10 +14,11 @@ import asyncio
 import logging
 import time
 
+from travelcore.models import OfferIn, RunSummary
+
 from .adapter import BaseAdapter
 from .fetch import HttpFetcher, RobotsDisallowedError
 from .ingest import IngestClient
-from .models import OfferIn, RunSummary
 from .settings import Settings, settings as default_settings
 
 log = logging.getLogger(__name__)

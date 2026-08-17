@@ -96,7 +96,7 @@ def run(
 
 
 def _print_summary(summary: object) -> None:
-    from travelscrape.core.models import RunSummary
+    from travelcore.models import RunSummary
 
     assert isinstance(summary, RunSummary)
     color = "green" if summary.status == "OK" else "red"
