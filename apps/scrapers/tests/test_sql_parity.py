@@ -4,16 +4,17 @@ Ako se ova dva raziđu, alias tabele prestaju da pogađaju i sve se tiho raspada
 skreper upiše alias 'djerdap', a baza traži 'derdap' i ne nalazi ništa.
 
 Test se preskače ako nema baze (npr. u brzom lokalnom pokretanju).
-Pokretanje sa bazom:
-    DATABASE_URL=postgresql://postgres@localhost:5432/kudaputujem pytest tests/test_sql_parity.py
+Pokretanje sa bazom (`docker compose up -d postgres`, šema već primenjena):
+    set DATABASE_URL=postgresql://kudaputujem:promeni_me@localhost:5432/kudaputujem
+    pytest tests/test_sql_parity.py
 """
 
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
+from collections.abc import Iterator
 
+import psycopg
 import pytest
 from travelcore.normalize.text import normalize
 
@@ -35,22 +36,25 @@ CASES = [
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-pytestmark = pytest.mark.skipif(
-    not DATABASE_URL or not shutil.which("psql"),
-    reason="nema DATABASE_URL ili psql nije instaliran",
-)
+pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="nema DATABASE_URL")
 
 
-def _sql_norm(value: str) -> str:
-    result = subprocess.run(
-        ["psql", DATABASE_URL, "-tAc", f"select norm_text($sql${value}$sql$);"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip()
+@pytest.fixture(scope="module")
+def db_connection() -> Iterator[psycopg.Connection]:
+    assert DATABASE_URL is not None
+    with psycopg.connect(DATABASE_URL) as conn:
+        yield conn
+
+
+def _sql_norm(conn: psycopg.Connection, value: str) -> str:
+    with conn.cursor() as cur:
+        cur.execute("select norm_text(%s)", (value,))
+        row = cur.fetchone()
+        assert row is not None
+        result: str = row[0]
+        return result
 
 
 @pytest.mark.parametrize("value", CASES)
-def test_python_matches_sql(value: str) -> None:
-    assert normalize(value) == _sql_norm(value)
+def test_python_matches_sql(db_connection: psycopg.Connection, value: str) -> None:
+    assert normalize(value) == _sql_norm(db_connection, value)
