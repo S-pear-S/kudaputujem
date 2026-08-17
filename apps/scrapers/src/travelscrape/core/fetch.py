@@ -143,7 +143,10 @@ def _validate_ssrf(host: str, allowed_domains: set[str] | None) -> None:
         raise SsrfError(f"Ne mogu razresiti {host!r}: {exc}") from exc
     for info in infos:
         ip = info[4][0]
-        if _is_forbidden_ip(ip):
+        # `getaddrinfo` vraca tuple[int, bytes] za egzoticne adresne familije
+        # (npr. AF_PACKET) — za DNS/IP razresavanje ovde se to nikad ne desava,
+        # ali ako se ikad desi, tretiramo isto kao neparsiranu adresu: zabrani.
+        if not isinstance(ip, str) or _is_forbidden_ip(ip):
             raise SsrfError(
                 f"IP {ip!r} za {host!r} je u zabranjenom opsegu (SSRF zastita)"
             )
