@@ -225,3 +225,21 @@ def test_sitemap_filtrira_na_putovanje_obrazac():
 
 def test_sitemap_bez_loc_daje_praznu_listu():
     assert detail_urls_from_sitemap("<urlset></urlset>") == []
+
+
+# --------------------------------------------------------------- prazan/nevalidan HTML
+#
+# Karakterizacioni testovi, NE regresioni (CLAUDE.md pravilo 18) — fiksiraju
+# postojece ponasanje, ne cuvaju od nekadasnjeg buga. oktopod.py nema
+# tree.root guard kao soleazur.py (parse_hotel_page nikad ne dira .root,
+# oslanja se na tree.css_first("title") koje selectolax bezbedno vraca None),
+# ali kontrakt "neocekivan HTML vraca [], ne dize izuzetak" je isti i vredi
+# ga fiksirati istim obrascem.
+
+
+@pytest.mark.parametrize(
+    "html",
+    ["", "<html></html>", "   ", "<html><body><p>nema tabele</p></body></html>"],
+)
+def test_neocekivan_ulaz_vraca_prazno(html: str) -> None:
+    assert parse_hotel_page(html, URL, reference=REFERENCE) == []

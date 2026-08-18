@@ -207,3 +207,22 @@ def test_external_id_je_stabilan():
 def test_oznake_soba_prolaze_kroz_normalizator(offers):
     codes = {p.room_code for o in offers for d in o.departures for p in d.prices}
     assert codes <= {"1/2", "1/3", "1/3+1", "1/4", "1/4+1"}
+
+
+# --------------------------------------------------------------- prazan/nevalidan HTML
+#
+# Karakterizacioni testovi, NE regresioni (CLAUDE.md pravilo 18): tvrde kako se
+# parser danas ponaša na prazan/nevalidan ulaz, ne da je nekad bio pokvaren.
+# `tree.root is None` guard u parse_price_page je odbrana za granu koju
+# selectolax tipski dozvoljava (`Node | None`) ali je kroz javni API ove
+# verzije nedostizna — ovi testovi fiksiraju ponasanje, pa ako se sutra
+# parser "pojednostavi" tako da parse_price_page pocne da diza izuzetak,
+# ovde ce se to videti.
+
+
+@pytest.mark.parametrize(
+    "html",
+    ["", "<html></html>", "   ", "<html><body><p>nema tabele</p></body></html>"],
+)
+def test_neocekivan_ulaz_vraca_prazno(html: str) -> None:
+    assert parse_price_page(html) == []
