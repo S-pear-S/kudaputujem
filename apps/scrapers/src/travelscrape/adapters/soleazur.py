@@ -431,8 +431,11 @@ def parse_price_page(html: str, default_year: int = 2026) -> list[OfferIn]:
     year = default_year
 
     if tree.root is None:
-        # Prazan ili nevalidan HTML — skrepovan sadrzaj je neprijateljski ulaz
-        # (pravilo 8), ne pucati nego vratiti prazno kao i kad naslov nedostaje.
+        # selectolax tipizira HTMLParser.root kao Node | None. Kroz javni API
+        # ove verzije selectolax-a grana je nedostizna (HTML5 auto-repair
+        # uvek vrati bar <html>), ali tip to ne garantuje za buduce verzije.
+        # Obradjujemo je umesto assert/type: ignore (pravilo 18) — vracamo
+        # prazno kao za skrepovan sadrzaj koji je neprijateljski ulaz (pravilo 8).
         return offers
 
     for node in tree.root.traverse(include_text=False):
