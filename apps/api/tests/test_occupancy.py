@@ -213,6 +213,27 @@ def test_cena_po_osobi_se_racuna_na_ukupan_broj_putnika(solver: OccupancySolver)
     _assert_money(result.per_person(party.size), "299.00")  # 897 / 3
 
 
+def test_per_person_deljenje_koje_se_ne_zavrsava_na_3_osobe() -> None:
+    """Nalaz 3 (poruka 9): Kotlin `divide(scale=2, HALF_UP)` zaokružuje jednom,
+    Python `(total / n).quantize(...)` zaokružuje posle deljenja na 28 cifara —
+    dva koraka umesto jednog. Testira Solution direktno, bez solvera, da se
+    izoluje tačno ovo ponašanje od kombinatorike raspoređivanja.
+
+    100.00 / 3 = 33.333(3)... -> ručno po HALF_UP na 2 decimale: treća decimala
+    je 3 (< 5), zaokružuje se NADOLE -> 33.33.
+    """
+    solution = Solution(total=Decimal("100.00"), currency="EUR", rooms=[])
+    _assert_money(solution.per_person(3), "33.33")
+
+
+def test_per_person_deljenje_koje_se_ne_zavrsava_na_7_osoba() -> None:
+    """100.00 / 7 = 14.285714(285714)... -> treća decimala je 5 (>= 5),
+    zaokružuje se NAGORE -> 14.29.
+    """
+    solution = Solution(total=Decimal("100.00"), currency="EUR", rooms=[])
+    _assert_money(solution.per_person(7), "14.29")
+
+
 def test_minimum_for_adults_ne_baca_izuzetak_za_nemoguc_broj_osoba(
     solver: OccupancySolver,
 ) -> None:
