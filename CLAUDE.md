@@ -4,10 +4,11 @@
 > Ako nešto u kodu protivreči ovom fajlu, prvo pitaj — ne pretpostavljaj da je fajl zastareo.
 > Kad doneseš novu odluku ili završiš veću stavku, **ažuriraj ovaj fajl u istom commit-u**.
 
-Poslednje ažuriranje: 18.08.2026. (ADR 0001 korak 2: `alembic` skelet gotov, C1+C2 provere
-prazne — postojeća baza od 15.08 NIJE zastarela u odnosu na današnje SQL fajlove, alembic daje
-identičnu šemu i podatke kao sirov SQL; korak C3 čeka pregled. Kotlin API još postoji nepromenjen
-i i dalje je jedini radni backend — vidi §6)
+Poslednje ažuriranje: 19.08.2026. (**ADR 0001 korak 2 GOTOV** — `postgres_data` volumen od
+15.08 obrisan posle rezervne kopije i provere, baza sad postoji isključivo kroz `alembic upgrade
+head`; jedan `.venv` u korenu za sva tri Python paketa; 164 testa prolaze, 0 preskočeno. Kotlin
+API još postoji nepromenjen i i dalje je jedini radni backend — vidi §6. Sledeće: korak 3,
+OccupancySolver, čeka korisnikov pregled C3 rezultata)
 Repo: `https://github.com/S-pear-S/kudaputujem` · grana `main`
 
 ---
@@ -25,20 +26,22 @@ Ako je ovo prvi put da vidiš ovaj repo u ovoj sesiji, evo najkraće moguće sli
 - Zajednički domenski kod (enumi, pydantic modeli, normalizacija) je premešten u
   `packages/travelcore`. `apps/scrapers/travelscrape` sada **samo uvozi** odatle, nema više
   duplikata. Ovo je § 4.2/4.8/§8 pravilo 17 ispod.
-- Pre koraka 2, korisnik je tražio da se prvo počisti pred-postojeći `mypy --strict`/`ruff`
-  dug i da se konačno pokrene `test_sql_parity.py` nad pravom bazom — oboje gotovo 17.08.2026
-  (§6, §9). **Docker Postgres je sad gore i ima primenjenu šemu** (V1+V2, 323 destinacije) —
-  volume postoji od 15.08.2026, lozinka u `.env` je `promeni_me`. **Ne briši taj volumen ni
-  ne menjaj lozinku dok ne dođe ADR 0001 korak C3** (eksplicitno odobren korak koji to radi).
-- `apps/api` sad ima i Python `.venv` (paket `travelapi`) sa `alembic` skeletom, koegzistira sa
-  Kotlinom bez sukoba. `alembic upgrade head` (revizije `0001`+`0002`) daje **dokazano identičnu**
-  šemu i podatke kao direktna primena `V1__init.sql`+`V2__seed_geo.sql` (§6, C1+C2 provere).
-- **Sledeći korak, kad korisnik da zeleno svetlo:** ADR 0001 korak C3 — briše se `postgres_data`
-  volumen od 15.08, baza se pravi iznova isključivo kroz `alembic`, prava lozinka u `.env`
-  (ne `promeni_me`). Tek posle toga korak 3 (OccupancySolver). Vidi §7.
+- **ADR 0001 korak 2 je GOTOV, u celini** (18–19.08.2026): mypy/ruff dug počišćen, `test_sql_parity.py`
+  na `psycopg`, `alembic` skelet napravljen i dokazano veran (C1+C2), atomičnost sirovog kursora
+  eksperimentalno dokazana, `postgres_data` volumen od 15.08 obrisan POSLE rezervne kopije i
+  provere da nema podataka van geo seed-a, baza sad postoji **isključivo** kroz `alembic upgrade
+  head`. Lozinka u `.env` je nasumična, ne `promeni_me` — pogledaj `.env` lokalno, **ne piši je
+  u ovaj fajl**.
+- **Jedan `.venv` u korenu repoa** (`D:\Kiki\kudaputujem\.venv`) za sva tri Python paketa —
+  `packages/travelcore`, `apps/scrapers`, `apps/api`. Više NEMA `apps/scrapers/.venv` ni
+  `apps/api/.venv` posebno. `pytest` iz korena (root `pytest.ini`) pokuplja i
+  `apps/scrapers/tests` i `apps/api/tests`. Vidi §10.
+- **Sledeći korak, kad korisnik da zeleno svetlo:** ADR 0001 korak 3 — `OccupancySolverTest.kt`
+  → `tests/test_occupancy.py` PRVO (svi crveni, nepromenjeni brojevi), tek onda
+  `pricing/occupancy.py`. Vidi §7. **Ne kreći sam — korisnik traži da javiš C3 rezultat i čekaš.**
 - Radni obrazac sa korisnikom ide kroz `instrukcije/` (patch/md fajlovi) — vidi §2. Poruke
-  `porukazaclaudecode1.md` do `6.md` su **već primenjene i zatvorene** u ovoj tački; ako stigne
-  `porukazaclaudecode7.md` ili novi `.patch`, to je sledeći zadatak.
+  `porukazaclaudecode1.md` do `7.md` su **već primenjene i zatvorene** u ovoj tački; ako stigne
+  `porukazaclaudecode8.md` ili novi `.patch`, to je sledeći zadatak.
 - Skreper adapteri: `soleazur.rs` i `oktopod.rs` gotovi i verifikovani. `grandtours.rs` je
   sledeći na redu, čeka fixture od korisnika (Chrome ekstenzija nema još dozvolu za taj domen).
 
@@ -122,12 +125,14 @@ sadrže istoriju dosadašnjih instrukcija, ne samo najnovije.
 | `porukazaclaudecode3.md` | potvrda 1b, nalog za 1c (brisanje shim-ova), `import-linter` kontrakt kao "pravilo 16" (ovde upisano kao **pravilo 17**, vidi §8 zašto) | ✓ primenjeno (1c + import-linter), korisnik je tražio da se stane posle ovoga |
 | `porukazaclaudecode4.md` | potvrda 1c, promena plana: NE ide se odmah na alembic. A) počisti mypy/ruff dug pre koraka 2 (razlog: crvena osnovna linija maskira nove greške iz ~1200 linija koje dolaze). B) digni Postgres, prepiši `test_sql_parity.py` na `psycopg`, pusti ga stvarno prvi put. C) tek onda alembic — **eksplicitno NE raditi dok korisnik ne pregleda rezultat parity testa**. D) podsetnik za `docker-compose.yml` u koraku 6 | ✓ primenjeno A+B+D (commit-i `daf7926`, `83596d2`, `7b47cb7`, `791d4aa`), **korisnik ponovo traži da se stane, C se ne radi dok ne pregleda 153/153 rezultat** |
 | `porukazaclaudecode5.md` | A) testovi za oba bug fix-a iz poruke 4, vrati na commit pre ispravke i potvrdi da padaju. B) parity test (153/0) je bio nad bazom od 15.08, ne dokazuje da se slaže sa DANAŠNJIM SQL-om. C) alembic u tri dela — C1 (diff stare baze vs. danas), C2 (alembic vs. ref), C3 (baza iznova). Redosled: A → C1 → stani | ✓ primenjeno (commit `08704a1` — fetch.py test genuinski pada na starom kodu nakon ispravke sa `12345`→`1500000000`; soleazur/oktopod testovi NE padaju na starom kodu, prijavljeno umesto zataškano), C1 diff prazan (van `\restrict`/`flyway_schema_history`) |
-| `porukazaclaudecode6.md` | potvrda C1. Odluka o `tree.root`: **opcija 1** — guard ostaje (ne `assert`/`type: ignore`, oba su gora od guarda), postaje pravilo 18 u §8, testovi za oba buga preimenovani u karakterizacione. Ispravka C2 kriterijuma: treba i PODACI, ne samo šema (`--schema-only` diff bi bio prazan i da `0002` uopšte ne izvrši). Redosled: pravilo 18 + testovi → C2 → stani i javi oba diff-a → C3 | ✓ primenjeno (commit-i `78159c8`, `2d07b3d`), **korisnik ponovo traži da se stane, C3 se ne radi dok ne pregleda oba C2 diff-a** |
+| `porukazaclaudecode6.md` | potvrda C1. Odluka o `tree.root`: **opcija 1** — guard ostaje (ne `assert`/`type: ignore`, oba su gora od guarda), postaje pravilo 18 u §8, testovi za oba buga preimenovani u karakterizacione. Ispravka C2 kriterijuma: treba i PODACI, ne samo šema (`--schema-only` diff bi bio prazan i da `0002` uopšte ne izvrši). Redosled: pravilo 18 + testovi → C2 → stani i javi oba diff-a → C3 | ✓ primenjeno (commit-i `78159c8`, `2d07b3d`) |
+| `porukazaclaudecode7.md` | potvrda C2. Tri provere pre C3: (1) sirovi kursor mora deliti alembic-ovu transakciju — dokazano eksperimentom, namerna greška na kraju revizije 0002 nad praznom bazom ostavlja **nula tabela**, uklj. iz 0001. (2) prebroj §8 — 18 pravila, neprekidan niz, pravilo 18 je ispravno (17 je import-linter). (3) jedan `.venv` u korenu umesto po paketu. Zatim C3 — korisnik dodatno tražio rezervnu kopiju PRE brisanja volumena (`docker volume rm` je prvo blokiran auto-mode klasifikatorom, korisnik eksplicitno potvrdio nastavak uz uslov rezervne kopije) | ✓ primenjeno u celini (commit `18d70cf` za venv; C3 izvršen: backup 129KB/2727 linija proveren van repoa, potvrđeno da nema podataka van geo seed-a, volumen obrisan, baza nastala isključivo kroz `alembic upgrade head`, **164 testa prolaze, 0 preskočeno**) |
 | `0001soleazuradapterverifikovannadpravimfixtureomf.patch` | soleazur fixture iz pravog DOM-a, prepravke rowspan/redosled/PO OSOBI | ✓ primenjeno |
 | `0001Odlukadevetblokiranihizvoratrajnovanopsegabez.patch` | devet trajno isključenih izvora (§8 pravilo 13) | ✓ primenjeno |
 
-Ako sledeća sesija zatekne nov `.patch` ili `porukazaclaudecode7.md`, to je sledeći zadatak —
-ne čekaj dalja uputstva van tog fajla.
+**ADR 0001 korak 2 je time u celini završen.** Ako sledeća sesija zatekne nov `.patch` ili
+`porukazaclaudecode8.md`, to je sledeći zadatak — ne čekaj dalja uputstva van tog fajla. Ako
+ništa novo ne stigne, sledeći korak je ADR 0001 korak 3 (§7) — ali čeka korisnikovo "kreni".
 
 ---
 
@@ -416,8 +421,11 @@ svaki se završava zelenim `pytest`-om, Kotlin se briše poslednji.
 | **Pravilo 18** | Kad tip strane biblioteke kaže `Optional`, obrađujemo granu, ne `assert`/`# type: ignore`. Testovi koji je fiksiraju su karakterizacioni, ne regresioni | ✓ **commit `78159c8`** — `tree.root: Node \| None` u soleazur/oktopod, vidi §9 |
 | **2, C1** | Provera da postojeća baza (volumen od 15.08) nije razvijena protiv zastarele šeme | ✓ — `diff` `pg_dump --schema-only` prazan (van nasumičnog `\restrict` tokena i `flyway_schema_history`, oboje objašnjeno), `pg_get_functiondef(norm_text)` identičan |
 | **2, C2** | `alembic` skelet, revizije `0001`/`0002`, provera ŠEME **i** PODATAKA između `ref` (sirov SQL) i `mig` (`alembic upgrade head`) | ✓ **commit `2d07b3d`** — oba `diff`-a prazna, vidi §9 za detalje i objašnjenje `created_at`/`updated_at` razlike |
-| **2, C3** | `postgres_data` volumen od 15.08 se briše, prava baza se pravi iznova ISKLJUČIVO kroz `alembic`, prava lozinka u `.env` | ⏳ **SLEDEĆI KORAK** — korisnik traži da stane i pregleda oba C2 diff-a pre ovoga |
-| **3** | `OccupancySolverTest.kt` → `tests/test_occupancy.py` (svi crveni), pa `pricing/occupancy.py` dok ne pozelene | ne početo |
+| **Atomičnost sirovog kursora** | Dokaz da `migrations/_raw_sql.py` deli alembic-ovu transakciju, ne otvara novu konekciju | ✓ — namerna greška na kraju revizije 0002 nad praznom bazom ostavlja **nula tabela** posle pada, uklj. sve iz 0001. Privremena izmena vraćena, `git diff` prazan |
+| **Broj pravila u §8** | Provera da nema rupe/duplikata posle više sesija dodavanja pravila | ✓ — 18 pravila, neprekidan niz 1–18. Pravilo 18 je ispravno (17 je import-linter, pomeren sa "16" u poruci 3) |
+| **Jedan `.venv` u korenu** | `apps/scrapers/.venv` i `apps/api/.venv` spojeni u `D:\Kiki\kudaputujem\.venv`, sva tri paketa (`travelcore`, `travelscrape`, `travelapi`) instalirana `-e` u njega | ✓ **commit `18d70cf`** — `pytest.ini` u korenu, `pytest`/`ruff`/`mypy`/`lint-imports` isti rezultati kao pre premeštanja |
+| **2, C3** | `postgres_data` volumen od 15.08 se briše, prava baza se pravi iznova ISKLJUČIVO kroz `alembic`, prava lozinka u `.env` | ✓ **GOTOVO 19.08.2026** — korisnik tražio rezervnu kopiju PRE brisanja (`docker volume rm` prvo blokiran auto-mode klasifikatorom kao destruktivna radnja, korisnik eksplicitno potvrdio). Backup 129KB/2727 linija (van repoa), potvrđeno da nema podataka van geo seed-a (samo `destination`=323, `destination_alias`=541, svih ostalih 17 tabela = 0). Volumen obrisan, baza nastala isključivo kroz `alembic upgrade head`. **164 testa prolaze, 0 preskočeno** (153 + `test_fetch.py` + prošireni karakterizacioni testovi od poruke 5/6). `ref`/`mig` baze nestale zajedno sa obrisanim volumenom (živele su u istom Postgres instance-u) — ništa dodatno za čišćenje |
+| **3** | `OccupancySolverTest.kt` → `tests/test_occupancy.py` (svi crveni), pa `pricing/occupancy.py` dok ne pozelene | ⏳ **SLEDEĆI KORAK** — čeka korisnikovo "kreni" |
 | **4** | Ostatak API-ja modul po modulu: `errors` → `db` → `geo` → `accommodation` → `ingest` → `pricing/price_index` → `search`, sa testovima uz svaki. Tu ide i treći `import-linter` kontrakt: `travelapi` ne sme da uvozi `travelscrape` | ne početo — `apps/api/src/travelapi/__init__.py` postoji, prazan placeholder |
 | **5** | E2E provera: `soleazur` skreper → `POST /internal/ingest` → baza → `GET /search` vraća tu ponudu, bez izmene `IngestClient`-a | ne početo |
 | **6** | Brisanje `apps/api/src/main/kotlin`, `src/test/kotlin`, `build.gradle.kts`, `settings.gradle.kts`, `gradle/`, `gradlew*`, JVM `Dockerfile`, čišćenje `docker-compose.yml` | **ne dirati pre koraka 5** |
@@ -711,7 +719,8 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
 | `psycopg` 3 puca na bukvalnom `%` u SQL-u kad se izvršava kroz SQLAlchemy | **visoka za korak 4** | Otkriveno u alembic reviziji 0001 — `V1__init.sql` ima komentar `"-20%"`. `op.execute()`/`Connection.exec_driver_sql()` idu kroz SQLAlchemy-ev `cursor.execute(statement, parameters)` čak i sa praznim `parameters`, a psycopg 3 tada PARSIRA string tražeći `%s`/`%b`/`%t` placeholdere i puca na svakom drugom `%`. Rešenje ovde: sirovi DBAPI kursor (`connection.connection.cursor().execute(sql)`, tačno JEDAN argument) — `migrations/_raw_sql.py`. **Isto pravilo važi za FastAPI u koraku 4**: svaki raw SQL sa mogućim bukvalnim `%` (LIKE obrasci, komentari, JSON operatori `?`/`@>`) mora ili kroz vezane parametre (`cursor.execute(sql, params)`, gde se `%s` STVARNO koristi kao placeholder), ili kroz sirovi kursor bez drugog argumenta — nikad `op.execute(plain_string)` stila bez razmišljanja o ovome. |
 | `gen_geo_seed.py` ima 6 pred-postojećih ruff nalaza | niska | Prvi put linted 18.08.2026 (novi `apps/api/pyproject.toml` prvi put uključuje `scripts/`). `E501`×2, `UP020`×2 (`io.open` → `open`), `SIM115`×2 (context manager). Nisu uvedeni ADR 0001 korakom 2 — samo `OUT` putanja je menjana u tom fajlu (§6). Ne diraj ih uz migracioni posao, zaseban commit ako se radi. |
 | ~~`test_sql_parity.py` nikad nije pokrenut na ovoj mašini~~ | ✓ rešeno 17.08.2026 | Tražio `psql` na PATH-u, kojeg nema jer je Postgres u Dockeru — test se preskakao **zauvek**, tiho, bez upozorenja. Commit `791d4aa`: prepisan na `psycopg`. Sad prvi put stvarno pokrenut: **153/153 prolazi**, Python i SQL normalizacija se slažu. Ne pretpostavljaj da je nešto provereno samo zato što test postoji — proveri da li se stvarno IZVRŠAVA. |
-| Postojeći `postgres_data` Docker volume ima lozinku iz 15.08.2026, ne iz `.env.example` template-a | niska, jednokratna zabuna | Volume je napravljen 15.08.2026 (pre nego što je ova sesija počela) sa lozinkom `promeni_me` (default iz `.env.example`) i već ima primenjene V1+V2 migracije (323 destinacije, `flyway_schema_history` OK). `.env` ne postoji dok se ne napravi — ko god ga prvi put pravi treba da proveri da li `postgres_data` volume već postoji (`docker volume ls`) pre nego što izmisli novu lozinku; ako postoji, lozinka mora da odgovara onoj sa kojom je volume prvi put pokrenut, inače `FATAL: password authentication failed` sa host mašine (`docker compose exec` i dalje radi jer container-interni `pg_hba.conf` trust-uje loopback unutar kontejnera bez obzira na lozinku — ne daj se zavarati time). |
+| ~~Postojeći `postgres_data` Docker volume imao lozinku iz 15.08, ne iz `.env.example`~~ | ✓ rešeno 19.08.2026 | Volume od 15.08 je obrisan u ADR 0001 koraku C3 (§6), posle rezervne kopije i provere da nema podataka van geo seed-a. Nova baza je nastala isključivo kroz `alembic upgrade head`, sa nasumičnom lozinkom u `.env`. I dalje opšte pravilo za budućnost: pre nego što izmisliš lozinku za `.env`, proveri `docker volume ls` — ako `kudaputujem_postgres_data` već postoji, lozinka mora da odgovara onoj sa kojom je volume prvi put pokrenut, inače `FATAL: password authentication failed` sa host mašine (`docker compose exec` i dalje radi jer container-interni `pg_hba.conf` trust-uje loopback unutar kontejnera bez obzira na lozinku — ne daj se zavarati time). |
+| Dva odvojena `.venv` (`apps/scrapers/.venv`, `apps/api/.venv`) | ✓ rešeno 19.08.2026 | Spojeni u jedan `.venv` u korenu (§6, §10) — korak 5 (E2E) treba isto okruženje za skreper i API, korak 4 dodaje `travelapi` kao treći `.importlinter` `root_package`. |
 
 ---
 
@@ -720,48 +729,55 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
 Korisnik radi na **Windows**, projekat u `D:\Kiki\kudaputujem`. IntelliJ IDEA Ultimate za Kotlin
 deo (dok postoji), VS Code je ciljni editor za Python + Next.js (ADR 0001 korak 7).
 
+**Jedan `.venv` u korenu repoa** (`D:\Kiki\kudaputujem\.venv`, Python 3.12) za sva tri Python
+paketa — `packages/travelcore`, `apps/scrapers`, `apps/api`. Od 19.08.2026 NEMA više posebnih
+venv-ova po paketu (§6, §9).
+
 ```bash
-# baza i keš
-copy .env.example .env   # samo ako .env ne postoji — PRE toga proveri "docker volume ls" (§9)!
+# baza i keš — .env VEĆ POSTOJI, ima nasumičnu lozinku (proveri lokalno, ne piši je u CLAUDE.md).
+# Ako ga praviš iznova: copy .env.example .env, PRE toga proveri "docker volume ls" (§9) da
+# ne pogodiš postojeći volumen sa drugom lozinkom.
 docker compose up -d postgres redis
 docker compose ps        # oba "healthy"
 
-# API (Kotlin, JOŠ RADI) — gradlew VEĆ POSTOJI (apps/api/gradlew, ne treba "gradle wrapper" ponovo).
-# Ako je sistemski JAVA_HOME JDK 25, gradlew ne radi (vidi §9); postaviti privremeno
-# na JDK <=21, npr.:
-set JAVA_HOME=C:\Users\korisnik\.jdks\ms-21.0.8
-cd apps/api
-./gradlew build
-./gradlew bootRun       # http://localhost:8080, Swagger na /swagger-ui.html
-
-# skreperi + travelcore — venv VEĆ POSTOJI na apps/scrapers/.venv (Python 3.12.10)
-cd apps/scrapers
+# jedan venv za sve — pravi se JEDNOM, redosled zavisnosti je bitan
+python -m venv .venv
 .venv\Scripts\activate
-pip install -e ../../packages/travelcore   # PRVO travelcore
-pip install -e ".[dev]"                     # pa travelscrape (uklj. psycopg[binary]); obnavlja i ako .venv treba refresh
-pytest                       # bez DATABASE_URL: 140 testova, 13 preskočeno. SA DATABASE_URL: 153, 0 preskočeno
-ruff check .                 # očekivano: "All checks passed!" (0 nalaza od 17.08.2026)
-python -m mypy --strict ../../packages/travelcore/src/travelcore src/travelscrape   # očekivano: 0 grešaka
+pip install -e packages/travelcore
+pip install -e "apps/scrapers[dev]"
+pip install -e "apps/api[dev]"
+
+# pytest iz korena — pokuplja apps/scrapers/tests I apps/api/tests (pytest.ini u korenu)
+pytest                        # bez DATABASE_URL: 151 prolazi, 13 preskočeno (test_sql_parity.py)
+set DATABASE_URL=postgresql://kudaputujem:<lozinka-iz-.env>@localhost:5432/kudaputujem
+pytest                        # sa bazom: 164 testa, 0 preskočeno (stanje 19.08.2026, raste sa svakim korakom)
+
+# lint/tipovi — i dalje per-paket (svaki ima svoj ruff/mypy config u svom pyproject.toml)
+(cd apps/scrapers && ruff check .)                                          # očekivano: čisto
+(cd apps/api && ruff check migrations src/travelapi)                        # očekivano: čisto (gen_geo_seed.py ima 6 pred-postojecih nalaza, §9, ne diraj uz migracioni posao)
+python -m mypy --strict packages/travelcore/src/travelcore apps/scrapers/src/travelscrape   # očekivano: čisto
+python -m mypy --strict apps/api/migrations apps/api/src/travelapi                          # očekivano: čisto
 
 # provera granice travelcore/travelscrape (pravilo 17)
 lint-imports    # pokreni iz root-a repoa, čita .importlinter; očekivano "2 kept, 0 broken"
 
-# parity test sa bazom — šema (V1+V2) je VEĆ primenjena u postojećem volumenu, ne učitavati ponovo
-set DATABASE_URL=postgresql://kudaputujem:promeni_me@localhost:5432/kudaputujem
-pytest tests/test_sql_parity.py    # 153/153, Python normalize() == SQL norm_text() za svih 13 slučajeva
+# alembic — jedina staza do razvojne baze od 19.08.2026, Flyway se više NE koristi za nju
+cd apps/api
+set DATABASE_URL=postgresql://kudaputujem:<lozinka-iz-.env>@localhost:5432/kudaputujem
+alembic upgrade head          # primenjuje 0001 (V1) pa 0002 (V2), jedna transakcija za oba
+alembic downgrade -1          # namerno diže NotImplementedError, ne dira bazu (pravilo o jednosmernim migracijama)
+cd ..
 
-# regeneracija geo migracije posle izmene geo.yaml (izlaz je sad apps/api/migrations/sql/V2__seed_geo.sql)
+# regeneracija geo migracije posle izmene geo.yaml (izlaz je apps/api/migrations/sql/V2__seed_geo.sql)
 python apps/api/scripts/gen_geo_seed.py
 
-# alembic — venv VEĆ POSTOJI na apps/api/.venv (Python 3.12, sopstveni od travelscrape)
+# API (Kotlin, JOŠ RADI, koegzistira sa gornjim) — gradlew VEĆ POSTOJI (apps/api/gradlew).
+# Ako je sistemski JAVA_HOME JDK 25, gradlew ne radi (vidi §9); postaviti privremeno na JDK <=21:
+set JAVA_HOME=C:\Users\korisnik\.jdks\ms-21.0.8
 cd apps/api
-.venv\Scripts\activate
-pip install -e ".[dev]"
-set DATABASE_URL=postgresql://kudaputujem:promeni_me@localhost:5432/<baza>
-alembic upgrade head          # primenjuje 0001 (V1) pa 0002 (V2)
-alembic downgrade -1          # namerno diže NotImplementedError, ne dira bazu (pravilo o jednosmernim migracijama)
-ruff check .                  # čist za migrations/, gen_geo_seed.py ima 6 pred-postojecih nalaza (§9), ne diraj uz migracioni posao
-python -m mypy --strict migrations src/travelapi   # čist
+./gradlew build
+./gradlew bootRun       # http://localhost:8080, Swagger na /swagger-ui.html
+cd ../..
 
 # web frontend
 cd apps/web
@@ -803,12 +819,11 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 5. **Koliko agencija u prvoj javnoj verziji** — 5, 10 ili 20?
 6. **Kontakt mejl** za `User-Agent` skrepera i za lead formu. (Više ne blokira dopisivanje
    sa agencijama — po odluci od 16.08.2026. agencije se ne kontaktiraju.)
-7. **Da li da se krene na ADR 0001 korak C3 (brisanje `postgres_data` volumena od 15.08,
-   baza iznova kroz alembic, prava lozinka)?** Ovo je pitano već TRI puta u različitim oblicima
-   (posle 1c, posle mypy/ruff čistke i parity testa, posle C1) — korisnik svaki put tražio pauzu
-   pre nastavka. **Ne pretpostavljaj da je pauza gotova dok korisnik eksplicitno ne kaže
-   "kreni na C3" ili ekvivalentno — čak i ako oba C2 diff-a (poslednji poznati status: prazna)
-   deluju kao dovoljan dokaz da se nastavi.**
+7. ~~Da li da se krene na ADR 0001 korak C3?~~ **Odgovoreno i urađeno 19.08.2026** (§6, §13).
+   **Da li da se krene na ADR 0001 korak 3 (OccupancySolver)** je sad ekvivalentno pitanje —
+   ovaj obrazac se ponovio već ČETIRI puta (posle 1c, posle mypy/ruff čistke i parity testa,
+   posle C1, posle C2) i korisnik svaki put tražio pauzu pre nastavka. **Ne pretpostavljaj da
+   je pauza gotova dok korisnik eksplicitno ne kaže "kreni na korak 3" ili ekvivalentno.**
 
 ---
 
@@ -856,3 +871,7 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | 18.08.2026 | C1: `pg_dump --schema-only` diff između baze od 15.08 i `ref` (današnji SQL) — prazan van nasumičnog `\restrict`/`\unrestrict` tokena (potvrđeno različit na dva uzastopna dump-a iste nepromenjene baze) i `flyway_schema_history` (Flyway-ova tabela, nije u V1/V2 sadržaju). `pg_get_functiondef(norm_text)` identičan. Baza od 15.08 NIJE zastarela |
 | 18.08.2026 | C2 kriterijum ispravljen: `--schema-only` diff sam po sebi ne dokazuje da su PODACI ubačeni — da revizija `0002` uopšte ne izvrši, diff bi i dalje bio prazan. Dodata provera podataka |
 | 18.08.2026 | C2: `pg_dump --data-only` diff između `ref` i `mig` (alembic) NIJE bio prazan prvim pokušajem — ne zbog redosleda redova (očekivano u instrukciji) nego zbog `created_at`/`updated_at DEFAULT now()`, koje hvataju stvarno vreme svakog od dva odvojena učitavanja i uvek će se razlikovati nezavisno od alata. Rešenje: `md5(string_agg(... order by id))` po tabeli, isključujući te dve kolone — `destination` i `destination_alias` daju identičan heš, ostalih 17 tabela prazno=prazno. Šema I podaci potvrđeno identični |
+| 19.08.2026 | Dokaz atomičnosti sirovog kursora u `migrations/_raw_sql.py`: privremena namerna greška na kraju revizije 0002, pušteno `alembic upgrade head` nad praznom bazom — posle pada **nula tabela**, uključujući sve iz 0001. Kursor deli alembic-ovu transakciju (`op.get_bind().connection`), ne otvara novu. Izmena vraćena, `git diff` prazan pre commit-a |
+| 19.08.2026 | Prebrojano §8: 18 pravila, neprekidan niz 1–18, bez rupe i duplikata. Pravilo 18 (Optional iz strane biblioteke) je ispravan broj — 17 je već zauzet import-linter pravilom (pomerenim sa "16" u poruci 3 jer je 16 zauzeto tajnama). Korisnikova sumnja "dogovorili smo se za 17" je bila zasnovana na nepotpunoj slici numeracije, ne na stvarnoj grešci |
+| **19.08.2026** | **Jedan `.venv` u korenu umesto po paketu.** `apps/scrapers/.venv` i `apps/api/.venv` obrisani, sve tri paketa (`travelcore`, `travelscrape`, `travelapi`) instalirani u `D:\Kiki\kudaputujem\.venv`. Razlog: korak 5 (E2E) treba isto okruženje za skreper i API; korak 4 dodaje `travelapi` kao treći `.importlinter` `root_package`; VS Code bira jedan interpreter po prozoru. `pytest.ini` u korenu. Commit `18d70cf` |
+| **19.08.2026** | **ADR 0001 korak 2 GOTOV — `postgres_data` volumen od 15.08 obrisan, baza nastala isključivo kroz `alembic upgrade head`.** Pre brisanja: korisnik tražio rezervnu kopiju i proveru sadržaja — `docker volume rm` je i sam sistem prvo blokirao kao destruktivnu radnju (auto-mode klasifikator), korisnik eksplicitno potvrdio nastavak preko `AskUserQuestion`. Backup 129KB/2727 linija (van repoa, `/tmp`), potvrđeno preko `count(*)` po tabeli da nema ničeg van geo seed-a (`destination`=323, `destination_alias`=541, ostalih 17 tabela=0). Nova baza, nasumična lozinka u `.env`. **164 testa prolaze, 0 preskočeno** (153 iz poruke 4 + `test_fetch.py` + prošireni karakterizacioni testovi iz poruka 5/6) |
