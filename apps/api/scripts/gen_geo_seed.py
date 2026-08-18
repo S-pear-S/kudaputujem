@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Generiše Flyway migraciju sa kanonskom geografijom iz db/seed/geo.yaml.
+"""Generiše SQL migraciju sa kanonskom geografijom iz db/seed/geo.yaml.
 
 Pokretanje:
     python apps/api/scripts/gen_geo_seed.py
 
 Izlaz:
-    apps/api/src/main/resources/db/migration/V2__seed_geo.sql
+    apps/api/migrations/sql/V2__seed_geo.sql
 
 Migracija je idempotentna (ON CONFLICT DO UPDATE), pa se sme regenerisati i
-ponovo primeniti preko `flyway repair` / nove verzije kad se geo.yaml proširi.
+ponovo primeniti preko alembic revizije 0002 (op.execute) kad se geo.yaml
+proširi (ADR 0001 korak 2 — pre toga je ovo bio Flyway put, `flyway repair`).
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = ROOT / "src/main/resources/db/seed/geo.yaml"
-OUT = ROOT / "src/main/resources/db/migration/V2__seed_geo.sql"
+OUT = ROOT / "migrations/sql/V2__seed_geo.sql"
 
 # Srpska latinica -> ASCII. unicodedata sam ne rešava đ/Đ.
 TRANSLIT = {
