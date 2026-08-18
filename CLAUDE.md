@@ -4,11 +4,13 @@
 > Ako nešto u kodu protivreči ovom fajlu, prvo pitaj — ne pretpostavljaj da je fajl zastareo.
 > Kad doneseš novu odluku ili završiš veću stavku, **ažuriraj ovaj fajl u istom commit-u**.
 
-Poslednje ažuriranje: 19.08.2026. (**ADR 0001 korak 2 GOTOV** — `postgres_data` volumen od
-15.08 obrisan posle rezervne kopije i provere, baza sad postoji isključivo kroz `alembic upgrade
-head`; jedan `.venv` u korenu za sva tri Python paketa; 164 testa prolaze, 0 preskočeno. Kotlin
-API još postoji nepromenjen i i dalje je jedini radni backend — vidi §6. Sledeće: korak 3,
-OccupancySolver, čeka korisnikov pregled C3 rezultata)
+Poslednje ažuriranje: 19.08.2026. (**ADR 0001 koraci 2 i 3 GOTOVI.** Korak 2: `postgres_data`
+volumen od 15.08 obrisan posle rezervne kopije, baza isključivo kroz `alembic`. Korak 3:
+`OccupancySolver` prevod (`occupancy.py`), 25 testova, nezavisno verifikovan red-po-red od
+korisnika. **Nalaz koji čeka odluku: `solve()` najgori slučaj meri ~285 ms, 6× iznad 50 ms
+cilja — javljeno, NIJE optimizovano (§9).** Jedan `.venv` u korenu za sva tri Python paketa.
+Kotlin API još postoji nepromenjen, i dalje jedini radni backend — vidi §6. Sledeće: korak 4,
+čeka korisnikovo "kreni")
 Repo: `https://github.com/S-pear-S/kudaputujem` · grana `main`
 
 ---
@@ -604,7 +606,8 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
      - Memoizacija sa zadatim `rooms` — 4 odrasla u tačno 3 sobe, jedina moguća podela
        2+1+1, 698+499+499=1696.00. Ista stanja dostižu se iz više grana (koji god
        `room_type` prvi popuni dvoosobnu sobu), memo daje isti ispravan rezultat.
-   - **3d** — merenje najgoreg slučaja (8 odraslih, 4 dece, 6 soba), broj u §9.
+   - **3d** ✓ 19.08.2026 — izmereno, **~285 ms po pozivu, 6× iznad 50 ms cilja**. Detalji i
+     scenario u §9. **Javljeno, NIJE optimizovano** — čeka korisnikovu odluku o pravcu.
    - Detalji zamki: `instrukcije/porukazaclaudecode8.md`. Poznati, namerno neispravljen bug u
      rangiranju dece (zamka 4) — popravka ide u ZASEBAN commit POSLE 3c, ne sad.
    - **Nezavisna provera (poruka 9, 19.08.2026):** korisnik je pročitao `occupancy.py`,
@@ -867,6 +870,7 @@ Oba moraju dobiti pravi enum (u `travelcore`, kolone u bazi) pre nego što Faza 
 | `PriceIndexBuilder.loadDepartures` koristi `Triple` sa ugnježdenim parom | niska, Kotlin, nestaje u koraku 6 | radi, ali je nečitko; pri prevodu u korak 4 pisati kao dataclass/namedtuple umesto tuple-a, ne prevoditi doslovno |
 | Kursna lista ima hardkodovane rezervne vrednosti | srednja | EUR≈117.20 RSD; treba NBS sinhronizacija (§7 stavka 18) |
 | Solver pretpostavlja neograničen broj jedinica svakog tipa | prihvaćeno | dokumentovano, mora se reći korisniku u UI-ju. Preneti napomenu u `pricing/occupancy.py` docstring kad se prevede (korak 3) |
+| **`OccupancySolver.solve()` najgori slučaj (3d): ~285 ms po pozivu, PREVAZILAZI 50 ms cilj ~6×** | **visoka — javljeno, NIJE optimizovano** | Izmereno 19.08.2026, `timeit`, najbolje od 5×5 ponavljanja. Scenario: 8 odraslih + 4 dece (uzrasti 3/8/13/16, MAX_ADULTS/MAX_CHILDREN), 6 tipova soba (`1/2` do `1/4+2`, sve sa `ADULT`/`EXTRA_BED`/`CHILD`×3 uzrasna opsega, dva sa `SINGLE_SUPPLEMENT`) + 2 apartmana (`UNIT`, `PER_UNIT_PER_NIGHT`) — "sve vrste soba iz jednog termina" doslovno. **~287 ms bez `party.rooms` zadatog, ~285 ms sa `rooms=6`** — razlika zanemarljiva, `rooms` ne menja veličinu problema značajno ovde. Docstring iz `occupancy.py` (prenet iz Kotlina) tvrdi "memoizacija ga rešava u mikrosekundama" za ovaj opseg — **ta tvrdnja se ne potvrđuje empirijski za scenario sa OVOLIKO tipova soba i uzrasnih klasa** (originalna Kotlin verzija nikad nije merena na ovom obimu, samo pretpostavljena brza zbog malog opsega parametara — memo ključ ne hvata granularnost slot/child-bracket kombinatorike po tipu sobe, samo `(adults, counts, rooms_used)`). Nije optimizovano — korisnik treba prvo da vidi cifru pre nego što se odluči kako dalje (kandidati bez menjanja algoritma: keširati `_build_room_types` rezultat po terminu umesto po pozivu, ograničiti broj `room_types` koji ulaze u `solve()` na str. rezultata, profilisati da se nađe stvarno usko grlo pre nagađanja). |
 | `raw_document` će brzo rasti | srednja | brisati starije od 30 dana, particionisati po mesecu preko 50 GB |
 | Nema CI | srednja | testovi se za sada pokreću ručno; CI plan je §7 stavka 19, čeka da se Kotlin sklone iz matrice |
 | Fixture je skraćen na 2 od 10 sekcija (soleazur) | niska | pokriva sve strukturne slučajeve; puna stranica ima 84 reda |
@@ -983,10 +987,12 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 6. **Kontakt mejl** za `User-Agent` skrepera i za lead formu. (Više ne blokira dopisivanje
    sa agencijama — po odluci od 16.08.2026. agencije se ne kontaktiraju.)
 7. ~~Da li da se krene na ADR 0001 korak C3?~~ **Odgovoreno i urađeno 19.08.2026** (§6, §13).
-   **Da li da se krene na ADR 0001 korak 3 (OccupancySolver)** je sad ekvivalentno pitanje —
-   ovaj obrazac se ponovio već ČETIRI puta (posle 1c, posle mypy/ruff čistke i parity testa,
-   posle C1, posle C2) i korisnik svaki put tražio pauzu pre nastavka. **Ne pretpostavljaj da
-   je pauza gotova dok korisnik eksplicitno ne kaže "kreni na korak 3" ili ekvivalentno.**
+   Korak 3 (OccupancySolver) je isto gotov u celini (§6). **Otvoreno: šta uraditi sa nalazom
+   3d (`solve()` ~285 ms najgori slučaj, 6× iznad cilja)** — optimizovati pre koraka 4, ili
+   nastaviti i vratiti se posle? I dalje važi obrazac: ovo pitanje ("da li da se krene na
+   sledeći korak") se ponovilo već PET puta u različitim oblicima, korisnik svaki put tražio
+   pauzu pre nastavka. **Ne pretpostavljaj da je pauza gotova dok korisnik eksplicitno ne kaže
+   "kreni na korak 4" (ili "optimizuj prvo 3d") ili ekvivalentno.**
 
 ---
 
@@ -1055,3 +1061,5 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | 19.08.2026 | Nalaz 4 rešen: `Party.child_ages` je `Sequence[int]` na ulazu (prima listu radi udobnosti), `__post_init__` je zamrzava u `tuple` (`object.__setattr__`, jer je dataclass `frozen=True`) — pozivalac ne može da izmeni sastav grupe posle konstrukcije, i `Party` je stvarno heširljiv (`frozen=True` bez ovoga generiše `__hash__` koji puca na `list` polju). `RoomAssignment.child_ages` i `_RoomType.child_brackets` isto prešli na `tuple`. Novi test: `Party`/`RoomAssignment` u `set()` |
 | 19.08.2026 | Nalaz 3 proveren: dva testa direktno na `Solution.per_person()` (bez solvera) sa deljenjem koje se ne završava — `100.00/3` (ručno HALF_UP → `33.33`) i `100.00/7` (ručno HALF_UP → `14.29`). **Oba prolaze sa postojećom implementacijom** — dvostepeno zaokruživanje (deljenje na 28 cifara pa `quantize`, nasuprot Kotlinovom jednom koraku) se ne materijalizuje za ove vrednosti. Kod NIJE menjan (uputstvo: ne diraj kad test prođe), nalaz upisan u §9 |
 | **19.08.2026** | **ADR 0001 korak 3c gotov — 5 testova proširene pokrivenosti, 25 ukupno u `test_occupancy.py`.** Svih pet provereno protiv stvarnog solvera PRE pisanja tvrdnje (skripta van test fajla), nijedno nije otkrilo pogrešno ponašanje — dve moje ručne pretpostavke o očekivanim brojevima bile pogrešne pre provere (prevideo da `capacity_extra` može primiti INFANT-dete u ISTU sobu sa oba roditelja, i da solver može booking-ovati isti `room_type` više puta za rešenje "5 odraslih"), ispravljeno pre pisanja testa, ne posle. Nalaz: `capacity_total` se UVEK računa kao `max(capacity_adults)+max(capacity_extra)` nezavisno po koloni — `PriceOption` nema `capacity_total` polje ni u Kotlinu ni u Pythonu, iako kolona postoji u bazi (`price_option.capacity_total`) i vrednost iz baze se nikad ne čita |
+| **19.08.2026** | **ADR 0001 korak 3d — najgori slučaj izmeren, ~285 ms po pozivu, 6× iznad 50 ms cilja.** Scenario: 8 odraslih + 4 dece, 6 tipova soba + 2 apartmana, sve sa punim setom slotova (`ADULT`/`EXTRA_BED`/`CHILD`×3 opsega/`SINGLE_SUPPLEMENT`/`UNIT`) — "sve vrste soba iz jednog termina" doslovno. `party.rooms` zadato ili ne (6 vs. bez) ne menja rezultat značajno (285 vs 287 ms). Docstring prenet iz Kotlina tvrdi "mikrosekunde" za ovaj opseg parametara — ta tvrdnja se ne potvrđuje empirijski kad ima ovoliko tipova soba i uzrasnih klasa (memo ključ `(adults, counts, rooms_used)` ne hvata granularnost po tipu sobe). **Javljeno korisniku, nije optimizovano — čeka odluku o pravcu** (kandidati bez menjanja algoritma navedeni u §9, nisu isprobani) |
+| **19.08.2026** | **ADR 0001 korak 3 GOTOV U CELINI** (3a commit `ad8bc2d`, 3b `2cc2926`, 3c `1cef0bd`, plus nalazi 1–4 iz nezavisne provere). 25 testova, `ruff`/`mypy --strict` čisti kroz sve korake. Sledeći korak (4) čeka korisnikovo "kreni" |
