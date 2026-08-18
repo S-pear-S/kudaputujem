@@ -632,6 +632,24 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
        čitanje enuma iz reda), ne pojedinačnom enumu — ne implementirati po enumu ad-hoc.
        `SortBy`/`SortDirection` imaju analogan `fromParam` (case-insensitive, za URL parametre),
        isto pripada `travelapi` strani koraka 4.
+       **Odluka B (poruka 10, 19.08.2026): rezerva ostaje, ali prestaje da bude tiha.**
+       Generički helper u `travelapi` (ne po enumu):
+       ```python
+       def from_db(enum_cls, value, *, default, table, column):
+           """Nepoznata vrednost ne ruši upit, ali se ne prećutkuje."""
+       ```
+       - Kad se rezerva aktivira: **upozorenje u log** sa nazivom tabele, kolone, dobijenom
+         vrednošću i imenom enuma. Bez toga log ne vredi ništa — ne zna se gde da se traži.
+       - **`None` na ulazu vraća `None`, ne podrazumevanu vrednost** — za `NULL`-abilne kolone
+         (`departure.board_type`, `price_option.board_type`, `surcharge.code`). Kotlin ih meša u
+         istoj metodi (vidi `fromDb(value: String?)` potpis) i to je greška koju NE prenosimo.
+       - Test koji potvrđuje oba ponašanja: nepoznata vrednost → podrazumevana **i** upozorenje
+         u logu; `None` → `None`, bez upozorenja.
+       - Razlog za upozorenje umesto tihe rezerve: bez CHECK ograničenja (Faza B, ispod), greška
+         u pisanju iz skrepera uđe u bazu i pri čitanju se tiho pretvori u nešto uverljivo —
+         tačno onaj tihi kvar protiv kojeg je ceo projekat postavljen. Kad Faza B postavi CHECK
+         ograničenja, ovo upozorenje praktično nikad neće da se javi — to je i poenta: ako se
+         ipak javi, nešto zaobilazi bazu i to treba da se vidi isti dan.
      - `SurchargeKind`, `SurchargeUnit`, `Payable`, `CrawlStatus` — bez pridruženih podataka u
        Kotlinu, Python već ima sve članove, nema šta da nedostaje.
 5. **Korak 5: E2E provera.** `soleazur` skreper → `POST /internal/ingest` (Python API sad) →
@@ -671,6 +689,49 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
 19. CI: `pytest` (oba paketa) + `ruff` + `mypy --strict` + `lint-imports`. `gradlew test` ispada
     iz CI-ja čim se izvrši korak 6.
 20. Politika privatnosti i uslovi korišćenja **pre** nego što lead forma primi prvi upit.
+
+### Faza B (posle celog porta, koraci 1–8 gotovi) — CHECK ograničenja za enum kolone
+
+**Odluka A vlasnika projekta (poruka 10, 19.08.2026): CHECK ograničenja idu u Fazu B, ne sada.**
+Prvo se završava port do kraja (koraci 3–8), pa se onda čisti šema. Komentar u `Enums.kt:8`
+tvrdi da migracije postavljaju CHECK ograničenja na enum kolone — to je **netačno za sve
+enum kolone**, nijedna ih nema danas. Stvarna rupa, ali svesno odložena, ne zaboravljena.
+
+**Migracija je V3, nova.** Pravilo 4 stoji: `V1__init.sql` se ne dira nikad više, ni ovde.
+
+Pun spisak, prošao `V1__init.sql` red po red (kolona → enum → napomena):
+
+| Tabela.kolona | Enum | Napomena |
+|---|---|---|
+| `agency.product_kinds` | `ProductKind` | **`TEXT[]`, ne skalar** — CHECK ide preko `<@ ARRAY[...]::text[]`, ne isti obrazac kao ostalo |
+| `source.product_kind` | `ProductKind` | |
+| `source.health_status` | `SourceHealth` | |
+| `crawl_run.status` | `CrawlStatus` | |
+| `crawl_run.trigger_kind` | — | **Nema enum ni u Kotlinu ni u Pythonu.** Vrednosti `SCHEDULED/MANUAL/RETRY` postoje SAMO kao SQL komentar. Napraviti enum pre CHECK-a |
+| `destination.kind` | `DestinationKind` | Enum ne postoji ni u Pythonu (§7 korak 4) — mora se napraviti pre CHECK-a |
+| `destination_alias.status` | `AliasStatus` | |
+| `accommodation.kind` | `AccommodationKind` | |
+| `accommodation_alias.status` | `AliasStatus` | Nema komentar u SQL-u na ovoj koloni, ali isti obrazac kao `destination_alias.status` (default `'CONFIRMED'`) |
+| `offer.product_kind` | `ProductKind` | |
+| `offer.transport_type` | `TransportType` | |
+| `offer.board_type` | `BoardType` | `NOT NULL DEFAULT 'NONE'` |
+| `departure.transport_type` | `TransportType` | Nema komentar na ovoj koloni (redni broj 273), isti enum kao `offer.transport_type` |
+| `departure.board_type` | `BoardType` | **Nullable** — CHECK mora `col IS NULL OR col IN (...)`, ne goli `IN` |
+| `price_option.slot` | `PriceSlot` | |
+| `price_option.pricing_basis` | `PricingBasis` | Komentar prelama u 2 linije u SQL-u |
+| `price_option.board_type` | `BoardType` | **Nullable**, bez `DEFAULT` (razlikuje se od `offer.board_type`) |
+| `surcharge.code` | `SurchargeCode` | **Nullable.** SQL komentar nabraja 6 vrednosti, enum ima 7 (**nedostaje `RESERVATION_FEE`** u komentaru) — CHECK mora ići po stvarnom enumu iz koda, ne po SQL komentaru |
+| `surcharge.kind` | `SurchargeKind` | |
+| `surcharge.unit` | `SurchargeUnit` | **SQL komentar nabraja 4 vrednosti, enum ima 5** (**nedostaje `PER_UNIT_PER_NIGHT`** u komentaru — dodat u enum 17.08.2026, `CLAUDE.md` §13, komentar u `V1` nikad ažuriran jer je `V1` zamrznut) |
+| `surcharge.payable` | `Payable` | |
+| `transport_leg.direction` | — | **Nema enum ni u Kotlinu ni u Pythonu**, isti slučaj kao `crawl_run.trigger_kind`. Vrednosti `OUTBOUND/RETURN` samo kao SQL komentar |
+| `transport_leg.mode` | `TransportType` | SQL komentar nabraja 5 vrednosti (`BUS/PLANE/TRAIN/FERRY/MINIVAN`), pun `TransportType` ima 7 (`OWN`, `NONE` nedostaju) — proveriti da li je namerno uža domena (leg=deonica možda logično ne može biti "sopstveni prevoz" ili "bez prevoza") pre nego što se CHECK napiše 1:1 sa punim enumom |
+| `lead.status` | `LeadStatus` | |
+| `lead_event.kind` | — | Bez SQL komentara, bez enuma igde. **Proveriti da li je namerno slobodan tekst** (npr. `"email_sent"`, `"viewed"`) pre nego što se doda CHECK — možda ne pripada ovoj listi uopšte |
+
+**Nema treći put pored „ima u oba jezika" i „ima samo u Kotlinu":** `crawl_run.trigger_kind` i
+`transport_leg.direction` postoje SAMO kao SQL komentar, nemaju enum ni u Kotlinu ni u Pythonu.
+Oba moraju dobiti pravi enum (u `travelcore`, kolone u bazi) pre nego što Faza B napiše CHECK.
 
 ---
 
@@ -768,6 +829,11 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
     poziva obrisana iz `occupancy.py`, dokazano eksperimentom.) Koristi pomoćnu funkciju:
     `assert str(actual) == expected` (npr. `_assert_money(result.total, "698.00")`), za svaku
     proveru novčanog iznosa — ukupnu cenu, cenu po osobi, cenu po sobi.
+20. **`ORDER BY` i imena kolona nikad ne dolaze iz korisničkog unosa direktno, nego isključivo
+    preslikavanjem u član enuma koji nosi SQL izraz.** (19.08.2026, poruka 10.) `SortBy`
+    (`travelapi`, korak 4) nosi `sql_expression` po članu — vrednost iz zahteva se mapira na
+    član enuma, pa se koristi `taj_član.sql_expression`. Nikad se string iz zahteva ne lepi u
+    upit. Isto važi za `SortDirection` (`ASC`/`DESC`).
 
 ---
 
@@ -963,3 +1029,7 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | **19.08.2026** | **Nezavisna provera porta (poruka 9): korisnik je pročitao `occupancy.py`/`test_occupancy.py`/`OccupancySolver.kt` red po red, ne oslanjajući se na izveštaj. Port je veran, nalaz o `BigDecimal ==` potvrđen tačan.** Ipak četiri nalaza: (1) `test_occupancy.py` je koristio `==` za novac — `Decimal("698")==Decimal("698.00")` je `True`, Kotest `shouldBe` NIJE ekvivalentan jer poziva `equals()` koje JESTE osetljivo na skalu; port je tiho izgubio proveru koju je Kotlin čuvao. (2) `PricingBasis.perNight`/`perUnit` (Kotlin enum-sa-podacima) izgubljeni u prevodu, `_PER_NIGHT_BASES` u solveru je bio simptom. (3) `per_person()` zaokružuje dva puta (deljenje na 28 cifara pa `quantize`) nasuprot Kotlinovom jednom (`divide(..., 2, HALF_UP)` odjednom) — razlika praktično nemoguća ali nedokazana, nijedan test je ne bi uhvatio. (4) `list[int]` u `frozen=True` dataclass-u — `TypeError` na heširanju, i pozivalac može mutirati vraćen `Solution` |
 | 19.08.2026 | Nalaz 1 rešen: `_assert_money(actual, expected)` — poredi `str()`, ne `==`. Svih 12 mesta gde se poredi novac prebačeno. Dokazano eksperimentom: sa `_assert_money` i uklonjenim `quantize()` pozivima, 12/12 relevantnih testova PADA (pre popravke, svih 17 je prolazilo i bez `quantize`). CLAUDE.md pravilo 19. Commit `0e474a2` |
 | 19.08.2026 | Nalaz 2 rešen za `PricingBasis`: `per_night`/`per_unit` kao `@property` na `travelcore.enums.PricingBasis`, `_PER_NIGHT_BASES` uklonjen iz `occupancy.py` u korist direktnog `.pricing_basis.per_night`. Test `packages/travelcore/tests/test_enums.py`, prvi test fajl u `travelcore` — dodat u root `pytest.ini` testpaths. Puna lista ostalih enum razlika (uklj. NOVI nalaz: `DestinationKind` ne postoji uopšte u `travelcore`, i sistemski nedostatak `fromDb`/`fromParam` fallback-metoda na 9 enuma) upisana u §7 korak 4, ne rađena danas |
+| **19.08.2026** | **Odluka A vlasnika: CHECK ograničenja na enum kolonama idu u Fazu B, posle celog porta (koraci 1–8), ne sada.** Nijedna enum kolona danas nema CHECK, iako `Enums.kt:8` komentar to tvrdi — stvarna rupa, svesno odložena. Pun spisak (23 kolone, uklj. `agency.product_kinds` kao `TEXT[]` sa drugačijim CHECK obrascem) upisan u §7 kao "Faza B". Migracija ide kao **nova `V3`**, `V1__init.sql` se ne dira (pravilo 4) |
+| 19.08.2026 | Pri pravljenju spiska za Fazu B nađena dva enuma koja **ne postoje ni u Kotlinu ni u Pythonu** — treći slučaj pored "ima u oba" i "ima samo u Kotlinu": `crawl_run.trigger_kind` (`SCHEDULED/MANUAL/RETRY`) i `transport_leg.direction` (`OUTBOUND/RETURN`) postoje samo kao SQL komentar. Oba moraju dobiti pravi enum pre Faze B. Nađena i dva zastarela SQL komentara koji ne prate stvarni enum: `surcharge.code` komentar nema `RESERVATION_FEE` (enum ima 7, komentar 6), `surcharge.unit` komentar nema `PER_UNIT_PER_NIGHT` (enum ima 5, komentar 4, dodato 17.08.2026 posle `V1` zamrzavanja) — CHECK u Fazi B mora ići po stvarnom enumu iz koda, ne po SQL komentaru |
+| **19.08.2026** | **Odluka B vlasnika (odgovor na sistemski nalaz o `fromDb`): rezerva ostaje, ali prestaje da bude tiha.** Kotlinov `fromDb` tiho svodi nepoznatu vrednost na podrazumevanu — sam po sebi odbranjivo (jedan pokvaren red ne sme oboriti stranicu), ali se spaja sa nepostojanjem CHECK ograničenja: greška iz skrepera uđe u bazu, pri čitanju se tiho pretvori u nešto uverljivo, niko ne sazna. Generički `from_db(enum_cls, value, *, default, table, column)` u `travelapi` (korak 4): upozorenje u log sa tabelom/kolonom/vrednošću/enumom kad se rezerva aktivira, `None` na ulazu vraća `None` (ne podrazumevanu — Kotlin ih meša, to je greška koju NE prenosimo), test za oba ponašanja. Kad Faza B postavi CHECK, ovo upozorenje praktično nikad neće da se javi — ako se ipak javi, nešto zaobilazi bazu i treba da se vidi isti dan |
+| 19.08.2026 | Pravilo 20: `ORDER BY`/imena kolona nikad iz korisničkog unosa direktno — isključivo preslikavanjem u član `SortBy`/`SortDirection` enuma koji nosi `sql_expression` |
