@@ -13,7 +13,13 @@ from decimal import Decimal
 import pytest
 from travelcore.enums import PriceSlot, PricingBasis
 
-from travelapi.pricing.occupancy import OccupancySolver, Party, PriceOption, Solution
+from travelapi.pricing.occupancy import (
+    OccupancySolver,
+    Party,
+    PriceOption,
+    RoomAssignment,
+    Solution,
+)
 
 
 def _option(
@@ -211,3 +217,18 @@ def test_minimum_for_adults_ne_baca_izuzetak_za_nemoguc_broj_osoba(
     solver: OccupancySolver,
 ) -> None:
     assert solver.minimum_for_adults(_hotel_pricing(), adults=99, nights=7) is None
+
+
+def test_party_i_room_assignment_se_mogu_staviti_u_set() -> None:
+    """child_ages je tuple, ne list — frozen=True dataclass je zato stvarno heširljiv."""
+    party_a = Party(adults=2, child_ages=[8])
+    party_b = Party(adults=2, child_ages=[8])
+    assert {party_a, party_b} == {party_a}
+
+    room_a = RoomAssignment(
+        room_code="1/2", room_name=None, adults=2, child_ages=(8,), amount=Decimal("349.00")
+    )
+    room_b = RoomAssignment(
+        room_code="1/2", room_name=None, adults=2, child_ages=(8,), amount=Decimal("349.00")
+    )
+    assert {room_a, room_b} == {room_a}
