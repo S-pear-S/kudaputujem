@@ -36,8 +36,8 @@ filtriranje miliona redova — za to postoji `departure_price_index`.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from dataclasses import dataclass, field
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
 from travelcore.enums import PriceSlot, PricingBasis
@@ -76,11 +76,15 @@ class PriceOption:
 @dataclass(frozen=True)
 class Party:
     adults: int
-    child_ages: list[int] = field(default_factory=list)
+    #: Prima bilo koji Sequence (npr. obična list) radi udobnosti pozivaoca,
+    #: ali se u __post_init__ zamrzava u tuple — isto kao Kotlinov List<Int>,
+    #: pozivalac ne može da izmeni sastav grupe posle konstrukcije.
+    child_ages: Sequence[int] = ()
     #: Ako je zadat, rešenje mora imati tačno toliko soba. `None` = optimizuj.
     rooms: int | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "child_ages", tuple(self.child_ages))
         if not 1 <= self.adults <= MAX_ADULTS:
             raise ValueError(f"broj odraslih mora biti 1..{MAX_ADULTS}")
         if len(self.child_ages) > MAX_CHILDREN:
@@ -103,7 +107,7 @@ class RoomAssignment:
     room_code: str
     room_name: str | None
     adults: int
-    child_ages: list[int]
+    child_ages: tuple[int, ...]
     amount: Decimal
 
 
@@ -208,7 +212,7 @@ class _RoomType:
     unit_price: Decimal | None
     unit_per_night: bool
     person_per_night: bool
-    child_brackets: list[_ChildBracket]
+    child_brackets: tuple[_ChildBracket, ...]
 
     @property
     def capacity_total(self) -> int:
@@ -233,7 +237,7 @@ def _build_room_types(options: list[PriceOption]) -> list[_RoomType]:
     room_types: list[_RoomType] = []
     for code, group in groups.items():
         name = next((o.room_name for o in group if o.room_name is not None), None)
-        child_brackets = [
+        child_brackets = tuple(
             _ChildBracket(
                 age_from=o.child_age_from if o.child_age_from is not None else 0,
                 age_to=o.child_age_to if o.child_age_to is not None else 11,
@@ -241,7 +245,7 @@ def _build_room_types(options: list[PriceOption]) -> list[_RoomType]:
             )
             for o in group
             if o.slot == PriceSlot.CHILD
-        ]
+        )
         room_types.append(
             _RoomType(
                 code=code,
@@ -426,7 +430,7 @@ def _best(
                                     room_code=room_type.code,
                                     room_name=room_type.name,
                                     adults=take_adults,
-                                    child_ages=list(ages),
+                                    child_ages=tuple(ages),
                                     # Zaokruženo OVDE, po sobi — total iznad ostaje
                                     # nezaokružen kroz rekurziju. Zbir cena po sobama
                                     # zato ne mora biti jednak ukupnoj ceni. Nije bug,
