@@ -1,0 +1,102 @@
+From 6a490bea4e8c73c0ac685b61e375fc4ca939c4f6 Mon Sep 17 00:00:00 2001
+From: S-pear-S <andrejmilos04@gmail.com>
+Date: Sun, 16 Aug 2026 11:24:51 +0000
+Subject: [PATCH] Odluka: devet blokiranih izvora trajno van opsega, bez
+ kontaktiranja
+
+Projekat se svesno drzi samo onoga do cega se dolazi jednostavno i sa sajta
+same agencije, uz pristanak izrazen kroz robots.txt.
+
+Za devet izvora koji u robots.txt nabrajaju skrepere sa Disallow: / :
+- ne pisu se adapteri
+- ne salju im se mejlovi ni za dozvolu ni za feed
+- ne traze se zaobilazni putevi (drugi poddomen, partnerski sajt koji
+  preprodaje istu ponudu, preimenovanje bota)
+
+Ostaje 24 upotrebljiva izvora od 33 profilisana, realno 22 jer maestral i
+aquatravel ne objavljuju cenovnik.
+
+Zabelezeno i da putovanja.bigblue.rs ima sopstveni robots.txt koji .aspx ne
+zabranjuje, ali se ipak ne koristi, po istom principu.
+---
+ CLAUDE.md       | 35 +++++++++++++++++++++++++++--------
+ docs/SOURCES.md |  7 +++++++
+ 2 files changed, 34 insertions(+), 8 deletions(-)
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 439313b..87c9675 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -357,13 +357,29 @@ search (SearchRequest, SearchResult, SearchService, SearchController).
+ 11. **Nema plaćanja ni rezervacije na našem sajtu.** Samo lead forma i redirect.
+ 12. **Lični podaci**: saglasnost nije unapred štiklirana, `consent_text_version` se čuva, IP se
+     čuva **hešovan sa solju**, `delete_after` se postavlja pri kreiranju leada.
+-13. **Devet izvora je isključeno jer im robots.txt blokira skrepere.** To su `bigblue.rs`,
+-    `fibula.rs`, `filiptravel.rs`, `odeontravel.rs`, `deustravel.rs`, `feniks-tours.rs`,
+-    `vivatravel.rs`, `balkanviator.com`, `lasta.rs`. Naš bot `KudaPutujemBot` nije na njihovim
+-    spiskovima, pa nas slovo protokola ne pokriva — ali sajt koji nabraja 40 skrepera i svima
+-    daje `Disallow: /` ne želi automatizovan pristup, a preimenovanje bota da bi se provuklo
+-    kroz rupu je isto što i lažiranje Chrome UA. **Ne piši adaptere za njih dok kruska ne odluči.**
+-    Ista provera važi za svaki novi izvor: `docs/recon/<slug>.md`, polje "Blokira nas".
++13. **Devet izvora je TRAJNO van opsega. Odluka doneta 16.08.2026, ne otvara se ponovo.**
++    `bigblue.rs`, `fibula.rs`, `filiptravel.rs`, `odeontravel.rs`, `deustravel.rs`,
++    `feniks-tours.rs`, `vivatravel.rs`, `balkanviator.com`, `lasta.rs`.
++
++    Njihov `robots.txt` nabraja skrepere sa `Disallow: /`. Naš bot `KudaPutujemBot` nije
++    na tim spiskovima, pa nas slovo protokola formalno ne pokriva — ali projekat je
++    svesno postavljen kao pravno čist, pa se namera poštuje isto kao slovo.
++
++    Šta to konkretno znači:
++    - **Ne pišu se adapteri za njih.**
++    - **Ne šalju im se mejlovi** za dozvolu ni za feed. Ne kontaktiramo ih uopšte.
++    - **Ne traže se zaobilazni putevi** — ni drugi poddomen, ni partnerski sajt koji
++      preprodaje istu ponudu, ni preimenovanje bota.
++
++    Princip: koristimo samo ono do čega se dolazi **brzo i jednostavno, sa sajta same
++    agencije, uz njen pristanak izražen kroz `robots.txt`.** Sve ostalo se preskače.
++
++    Ovo nije konačno za sva vremena — kad sajt poraste i bude imao šta da ponudi
++    agencijama, pregovori se mogu otvoriti. Do tada se lista ne dira.
++
++    Ista provera važi za **svaki novi izvor**: `docs/recon/<slug>.md`, polje „Blokira nas".
++    Ako blokira, izvor se ne uključuje i ne kontaktira.
++
+ 14. **`selectolax` `css("a, b")` NE vraća redosled dokumenta** nego prvo sve `a` pa sve `b`.
+     Kad kontekst zavisi od redosleda (naslov važi za tabelu ispod njega), koristi
+     `tree.root.traverse(include_text=False)`. Ovo je tiho pogrešan rezultat, ne greška.
+@@ -451,7 +467,8 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
+ 3. **Uzrast deteta** — potvrditi konvenciju "dete do 12" = gornja granica 11 godina.
+ 4. **Prikaz cene** — po osobi ili ukupno za grupu, kao podrazumevano?
+ 5. **Koliko agencija u prvoj javnoj verziji** — 5, 10 ili 20?
+-6. **Kontakt mejl** za User-Agent skrepera i za lead formu.
++6. **Kontakt mejl** za `User-Agent` skrepera i za lead formu. (Više ne blokira dopisivanje
++   sa agencijama — po odluci od 16.08.2026. agencije se ne kontaktiraju.)
+ 
+ ---
+ 
+@@ -476,3 +493,5 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
+ | 16.08.2026 | Chrome povezan; 22 sajta mapirana kroz pravi browser, selektori potvrđeni umesto pretpostavljeni |
+ | 16.08.2026 | soleazur cena je PO OSOBI (`CENA ARANŽMANA PO OSOBI` na `/hoteli/<slug>`), ne po jedinici — ranija pretpostavka ispravljena |
+ | 16.08.2026 | soleazur adapter prepravljen: rowspan, redosled dokumenta, jedan offer po prevozu zbog UNIQUE indeksa na `departure` |
++| 16.08.2026 | **Devet blokiranih izvora trajno van opsega, bez kontaktiranja.** Projekat ide isključivo na ono što je javno dostupno sa sajta agencije uz `robots.txt` pristanak. Bez mejlova, bez zaobilaznih putanja, bez pregovora u ovoj fazi |
++| 16.08.2026 | `putovanja.bigblue.rs` ima sopstveni `robots.txt` koji dozvoljava sve osim `.asmx`/`.ashx`; `.aspx` nije zabranjen. Ipak se ne koristi — vidi pravilo 13, poslednja alineja |
+diff --git a/docs/SOURCES.md b/docs/SOURCES.md
+index a129a2b..aaf0352 100644
+--- a/docs/SOURCES.md
++++ b/docs/SOURCES.md
+@@ -1,5 +1,12 @@
+ # Katalog izvora
+ 
++> **Odluka 16.08.2026.** Devet izvora čiji `robots.txt` blokira skrepere je **trajno van
++> opsega**: `bigblue.rs`, `fibula.rs`, `filiptravel.rs`, `odeontravel.rs`, `deustravel.rs`,
++> `feniks-tours.rs`, `vivatravel.rs`, `balkanviator.com`, `lasta.rs`.
++> Ne pišu se adapteri, **ne šalju im se mejlovi**, ne traže se zaobilazni putevi.
++> Projekat koristi samo ono do čega se dolazi jednostavno i sa sajta same agencije.
++> Lista se može revidirati kad sajt poraste; do tada se ne dira.
++
+ Status: **recon završen za 33 sajta** — vidi [docs/recon/](recon/README.md). Kolone `robots` i `ToS` se popunjavaju tek posle ručne provere, i izvor se
+ ne uključuje dok obe nisu zelene.
+ 
+-- 
+2.43.0
+

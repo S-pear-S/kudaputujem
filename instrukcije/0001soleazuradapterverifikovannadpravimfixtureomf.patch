@@ -1,0 +1,1520 @@
+From 4120efd1685aa6aec5d5045411b59a614880de3a Mon Sep 17 00:00:00 2001
+From: S-pear-S <andrejmilos04@gmail.com>
+Date: Sun, 16 Aug 2026 11:15:02 +0000
+Subject: [PATCH] soleazur adapter verifikovan nad pravim fixture-om; fixture
+ za oktopod
+
+Fixture-i snimljeni kroz pravi Chrome, iz DOM-a, pa selektori vise nisu
+pretpostavka:
+- tests/fixtures/soleazur/display_prices.html
+- tests/fixtures/oktopod/putovanje_vila_penny.html
+
+Cetiri greske u soleazur adapteru koje bi tiho dale pogresne podatke:
+- rowspan na imenu objekta: redovi nastavka imaju celiju manje, pa se soba
+  citala kao objekat a cena kao soba
+- css('h2, table') u selectolax ne vraca redosled dokumenta nego prvo sve h2
+  pa sve table, pa je svaka tabela dobijala poslednju destinaciju
+- jedan DepartureIn po ceni je pravio duplikate koji krse UNIQUE indeks
+  (offer_id, start_date, end_date, departure_place_raw); sada je jedan offer
+  po prevozu
+- ime objekta je u <h6><a> unutar rowspan celije, ne goli tekst
+
+Ispravke podataka provereno na izvoru:
+- cena je PO OSOBI ('CENA ARANZMANA PO OSOBI' na /hoteli/<slug>'), usluga je
+  najam (RO); ranija pretpostavka o ceni po jedinici bila je pogresna
+- puna cena ume da bude niza od akcijske (619 EUR (585 EUR)) pa is_promo ne
+  sme da se izvodi iz samog postojanja zagrade
+- oktopod: dve tabele nisu dva prevoza nego dve duzine boravka, 10 i 7 noci
+
+19 testova nad fixture-om, ruff cist
+---
+ CLAUDE.md                                     |  28 +-
+ .../src/travelscrape/adapters/soleazur.py     | 672 ++++++++++--------
+ .../oktopod/putovanje_vila_penny.html         |  57 ++
+ .../fixtures/soleazur/display_prices.html     |  50 ++
+ apps/scrapers/tests/test_soleazur.py          | 423 +++++------
+ docs/recon/oktopod.md                         |  32 +
+ docs/recon/soleazur.md                        |  24 +
+ 7 files changed, 737 insertions(+), 549 deletions(-)
+ create mode 100644 apps/scrapers/tests/fixtures/oktopod/putovanje_vila_penny.html
+ create mode 100644 apps/scrapers/tests/fixtures/soleazur/display_prices.html
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+index a82f989..439313b 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -4,7 +4,7 @@
+ > Ako nešto u kodu protivreči ovom fajlu, prvo pitaj — ne pretpostavljaj da je fajl zastareo.
+ > Kad doneseš novu odluku ili završiš veću stavku, **ažuriraj ovaj fajl u istom commit-u**.
+ 
+-Poslednje ažuriranje: 16.08.2026. (soleazur adapter + 24 testa) (recon 33 sajta integrisan u docs/recon/)
++Poslednje ažuriranje: 16.08.2026. (soleazur adapter verifikovan nad pravim fixture-om, 19 testova; fixture za oktopod snimljen)
+ Repo: `https://github.com/S-pear-S/kudaputujem` · grana `main`
+ 
+ ---
+@@ -278,11 +278,14 @@ search (SearchRequest, SearchResult, SearchService, SearchController).
+ 
+ | Adapter | Fajl | Status |
+ |---|---|---|
+-| soleazur.rs | `adapters/soleazur.py` | ✓ Gotov, 24 testa prolaze. **CSS selektori su PRETPOSTAVLJENI** — verifikovati lokalno sa `travelscrape snapshot soleazur-grcka https://soleazur.rs/lm/display_prices.php` pre prve produkcijske runde |
+-| planatravel.rs | — | Čeka HTML fixture |
+-| onlinetravel.rs | — | Čeka HTML fixture |
+-| maestral.co.rs | — | Čeka HTML fixture (maestral.co.rs **eksplicitno dopušta** ClaudeBot u robots.txt) |
+-| aquatravel.rs | — | Čeka HTML fixture |
++| soleazur.rs | `adapters/soleazur.py` | ✓ Gotov i **VERIFIKOVAN**. Fixture snimljen iz pravog DOM-a 16.08.2026, 19 testova nad njim. Prepravljen: rowspan, `h6` ime objekta, redosled dokumenta, jedan offer po prevozu, cena PO OSOBI |
++| oktopod.rs | — | **Fixture snimljen** (`fixtures/oktopod/putovanje_vila_penny.html`). Sledeći na redu |
++| grandtours.rs | — | Nema fixture, ali struktura potvrđena: 3× `table.tablepress` |
++| euroturs.rs | — | Nema fixture, struktura potvrđena: `table.main-table` |
++| planatravel.rs | — | Cenovnik traži query string `?checkinDate=…&nights=7&adults[0]=2`, pun page reload |
++| onlinetravel.rs | — | `table.tablepress-id-<n>`, ali primer je izlet a ne letovanje |
++| maestral.co.rs | — | **NEMA cenovnik na sajtu**, samo forma za upit. Ne čekati fixture |
++| aquatravel.rs | — | Cene tek posle AJAX poziva iz forme. Ne čekati fixture |
+ | ostali talas 2 | — | Čekaju fixtere |
+ 
+ ### NE POSTOJI
+@@ -361,7 +364,12 @@ search (SearchRequest, SearchResult, SearchService, SearchController).
+     daje `Disallow: /` ne želi automatizovan pristup, a preimenovanje bota da bi se provuklo
+     kroz rupu je isto što i lažiranje Chrome UA. **Ne piši adaptere za njih dok kruska ne odluči.**
+     Ista provera važi za svaki novi izvor: `docs/recon/<slug>.md`, polje "Blokira nas".
+-14. **Tajne nikad u repo.** `INGEST_API_KEY` i `ADMIN_API_KEY` su namerno odvojeni — skreper koji
++14. **`selectolax` `css("a, b")` NE vraća redosled dokumenta** nego prvo sve `a` pa sve `b`.
++    Kad kontekst zavisi od redosleda (naslov važi za tabelu ispod njega), koristi
++    `tree.root.traverse(include_text=False)`. Ovo je tiho pogrešan rezultat, ne greška.
++15. **HTML tabele sa `rowspan` se ne čitaju po fiksnom indeksu ćelije.** Red nastavka ima
++    manje ćelija. Računaj pomak iz `len(cells)` u odnosu na očekivani broj kolona.
++16. **Tajne nikad u repo.** `INGEST_API_KEY` i `ADMIN_API_KEY` su namerno odvojeni — skreper koji
+     procuri ne sme da može da briše agencije.
+ 
+ ---
+@@ -378,7 +386,8 @@ search (SearchRequest, SearchResult, SearchService, SearchController).
+ | Solver pretpostavlja neograničen broj jedinica svakog tipa | prihvaćeno | dokumentovano u KDoc-u i mora se reći korisniku u UI-ju |
+ | `raw_document` će brzo rasti | srednja | brisati starije od 30 dana, particionisati po mesecu preko 50 GB |
+ | Nema CI | srednja | testovi se za sada pokreću ručno |
+-| soleazur.rs CSS selektori neprovereni | **visoka** | `h2/h3/thead/tbody` su pretpostavljeni na osnovu Markdown izlaza WebFetch-a; puca tiho ako su tagovi drugačiji; pokrenuti `travelscrape snapshot` pre produkcije |
++| ~~soleazur.rs CSS selektori neprovereni~~ | ✓ rešeno | fixture iz pravog DOM-a, 19 testova; `h2` destinacija, `h6` objekat, `thead`/`tbody` potvrđeni |
++| Fixture je skraćen na 2 od 10 sekcija | niska | pokriva sve strukturne slučajeve; puna stranica ima 84 reda |
+ | Python 3.8.2 na sistemu korisnika | napomena | pyproject.toml zahteva >=3.12; za pokretanje testova ručno: `set PYTHONPATH=D:\Kiki\kudaputujem\apps\scrapers\src` + Python 3.8 sa `pip install httpx selectolax pydantic pydantic-settings tenacity eval_type_backport` |
+ 
+ ---
+@@ -464,3 +473,6 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
+ | 16.08.2026 | Adapter soleazur.rs gotov — `adapters/soleazur.py`, jedna PHP stranica sa svim LM cenama, 24 testa |
+ | 16.08.2026 | `StrEnum` compatibility shim dodat u `core/enums.py` (Python 3.8 nema `StrEnum`, dodat je u 3.11) |
+ | 16.08.2026 | Recon izveštaji (33 fajla) integrisani u `docs/recon/`, `docs/SOURCES.md` i §4.4/§4.4b usklađeni |
++| 16.08.2026 | Chrome povezan; 22 sajta mapirana kroz pravi browser, selektori potvrđeni umesto pretpostavljeni |
++| 16.08.2026 | soleazur cena je PO OSOBI (`CENA ARANŽMANA PO OSOBI` na `/hoteli/<slug>`), ne po jedinici — ranija pretpostavka ispravljena |
++| 16.08.2026 | soleazur adapter prepravljen: rowspan, redosled dokumenta, jedan offer po prevozu zbog UNIQUE indeksa na `departure` |
+diff --git a/apps/scrapers/src/travelscrape/adapters/soleazur.py b/apps/scrapers/src/travelscrape/adapters/soleazur.py
+index 0ec369d..a0ea4bd 100644
+--- a/apps/scrapers/src/travelscrape/adapters/soleazur.py
++++ b/apps/scrapers/src/travelscrape/adapters/soleazur.py
+@@ -1,30 +1,78 @@
+-"""Adapter za soleazur.rs.
+-
+-Izvor: /lm/display_prices.php — jedna PHP stranica sa svim last-minute cenama
+-Platforma: sopstveni PHP CMS
+-robots.txt: potpuno otvoren (Disallow: prazno)
+-Težina: 2/5
+-
+-Strategija: jedan GET na /lm/display_prices.php daje sve ponude.
+-HTML tabele su grupisane po destinaciji (h2/h3 naslov + <table>).
+-Format cene u ćeliji: "209€ (235€) / 275€ (305€)"
+-  → 209€ LM cena sopstvenim prevozom, (235€) regularna
+-  → 275€ LM cena busom, (305€) regularna
+-
+-VERIFIKUJ LOKALNO pre prve produkcijske runde:
+-- Tačne tagove za naslove sekcija (h2? h3? div.section-title?)
+-- Da li thead ima jedan ili dva reda zaglavlja
+-- Redosled kolona Objekat/Soba (da li su spojene u jedan td?)
+-- Format "/" za nedostupnost vs decimalni separator
++"""Adapter za soleazur.rs — last minute cenovnik za Grčku.
++
++Izvor:      https://soleazur.rs/lm/display_prices.php
++Platforma:  sopstveni PHP CMS
++robots.txt: `User-agent: *` / `Disallow:` — potpuno otvoren
++Težina:     2/5
++
++Cela ponuda je na jednoj stranici. Javna stranica `/last-minute-grcka` je učitava
++u `<iframe>`, ali se taj URL otvara i direktno, bez sesije i bez tokena, pa adapter
++radi **jedan GET**.
++
++## Struktura, potvrđena u pravom browseru 16.08.2026.
++
++```
++<h2>Neos Marmaras leto 2026</h2>          ← destinacija + godina
++<table class="table table-bordered table-sm">
++  <thead><tr>
++    <th>Objekat</th><th>Soba</th>
++    <th>11 dana/10 noci<br>Termin boravka 28.08.-07.09.<br>Sopstveni prevoz/Bus prevoz</th>
++    ...jedna <th> po terminu
++  </tr></thead>
++  <tbody>
++    <tr><td rowspan="3"><h6><a>Ridos house</a></h6></td><td>Studio 1/3+1</td><td>/</td>…</tr>
++    <tr><td>Mezoneta 1/4</td><td>265€ (x€) / 335€</td>…</tr>   ← BEZ ćelije objekta
++```
++
++Dve stvari koje ruše naivni parser:
++
++1. **`rowspan` na imenu objekta.** Redovi posle prvog imaju jednu ćeliju manje.
++   Ako se čita `cells[0]` kao objekat, na tim redovima se pročita soba, a kao soba
++   se pročita cena. Zato adapter računa pomak po redu, a ne po fiksnom indeksu.
++
++2. **Broj prevoza po koloni nije konstantan.** Halkidiki ima `Sopstveni prevoz/Bus prevoz`
++   (dve cene u ćeliji, razdvojene sa `/`), a Kefalonija ima kolone sa samo
++   `Avio prevoz` (jedna cena, bez `/`). Broj delova ćelije prati zaglavlje te kolone.
++
++## Format cene
++
++```
++209€ (235€) / 275€ (305€)
++ │      │      │      └── puna, bus
++ │      │      └───────── akcijska, bus
++ │      └──────────────── puna, sopstveni
++ └─────────────────────── akcijska, sopstveni
++```
++
++- `/` kao cela ćelija ili prazna ćelija = nema ponude za taj termin
++- `x€` = cena nije objavljena; taj deo se preskače
++- `619€ (585€)` = puna cena NIŽA od akcijske. To je greška u podacima na sajtu i
++  stvarno se javlja. Ne pretpostavljamo `original > amount`.
++
++## Cena je PO OSOBI
++
++Stranica `/hoteli/<slug>` piše doslovno: `CENA ARANŽMANA PO OSOBI`, uz
++`smeštaj 10 noćenja (usluga najam)`. Zato `slot=ADULT`, `PER_PERSON_PER_STAY`,
++`board_type=RO`. Ranija pretpostavka da se apartmani plaćaju po jedinici je bila
++pogrešna i proverena je na izvoru.
++
++## Zašto jedan offer po prevozu
++
++`departure` ima UNIQUE `(offer_id, start_date, end_date, departure_place_raw)`, a
++`transport_type` nije deo tog ključa. Ista soba u istom terminu ima dve cene, za
++sopstveni i za bus prevoz. Da se ne bi kršio indeks, agencijska ponuda se deli na
++dve naše: `…__own` i `…__bus`. To odgovara i stvarnosti — agencija ih prodaje kao
++dva različita aranžmana.
+ """
+ 
+ from __future__ import annotations
+ 
+ import re
++from collections.abc import AsyncGenerator
+ from dataclasses import dataclass, field
+ from datetime import date
+ from decimal import Decimal, InvalidOperation
+-from typing import AsyncGenerator
++from typing import ClassVar
+ 
+ from selectolax.parser import HTMLParser, Node
+ 
+@@ -37,384 +85,382 @@ from travelscrape.core.enums import (
+     ProductKind,
+     TransportType,
+ )
+-from travelscrape.core.models import (
+-    AccommodationIn,
+-    DepartureIn,
+-    OfferIn,
+-    PriceIn,
+-)
++from travelscrape.core.models import AccommodationIn, DepartureIn, OfferIn, PriceIn
++from travelscrape.normalize.rooms import parse_room_code
++from travelscrape.normalize.text import slugify
+ 
+ _BASE = "https://soleazur.rs"
+ _PRICES_URL = f"{_BASE}/lm/display_prices.php"
+ 
+-# Regex za parsiranje
+-_DATE_PAT = re.compile(r"(\d{1,2})\.(\d{1,2})\.")
+-_YEAR_PAT = re.compile(r"\b(20\d{2})\b")
+-_PRICE_PAT = re.compile(r"(\d+)\s*€(?:\s*\((\d+)\s*€\))?")
+-_ROOM_CAP_PAT = re.compile(r"1/(\d+)(?:\+(\d+))?")
+-_NIGHTS_PAT = re.compile(r"(\d+)\s*(?:d(?:ana)?|noć)", re.IGNORECASE)
+-
++_DATE_RANGE = re.compile(r"(\d{1,2})\.(\d{1,2})\.\s*-\s*(\d{1,2})\.(\d{1,2})\.")
++_YEAR = re.compile(r"\b(20\d{2})\b")
++_NIGHTS = re.compile(r"(\d{1,2})\s*noc", re.IGNORECASE)
++_DAYS = re.compile(r"(\d{1,2})\s*dan", re.IGNORECASE)
++# "209€", "209 €", "209€ (235€)" — zagrada je opciona
++_PRICE = re.compile(
++    r"(\d+(?:[.,]\d+)?)\s*€(?:\s*\(\s*(\d+(?:[.,]\d+)?|x)\s*€\s*\))?", re.IGNORECASE
++)
++_SUFFIX = re.compile(r"\s*(leto|zima|letovanje|zimovanje)\s*\d{4}\s*$", re.IGNORECASE)
++
++# Redosled je bitan: "sopstveni" pre "bus" jer zaglavlje glasi "Sopstveni prevoz/Bus prevoz".
++_TRANSPORT_WORDS: tuple[tuple[str, TransportType], ...] = (
++    ("sopstven", TransportType.OWN),
++    ("bus", TransportType.BUS),
++    ("avio", TransportType.PLANE),
++    ("voz", TransportType.TRAIN),
++)
+ 
+-# ---------------------------------------------------------------------------
+-# Interne strukture parsiranja
+-# ---------------------------------------------------------------------------
+ 
++@dataclass(frozen=True)
++class _Period:
++    """Jedna kolona cenovnika — jedan termin."""
+ 
+-@dataclass
+-class _PeriodCol:
+     start_date: date
+     end_date: date
+     nights: int
+-    transports: list[TransportType]
++    transports: tuple[TransportType, ...]
+ 
+ 
+ @dataclass
+-class _PriceEntry:
++class _Price:
+     transport: TransportType
+     amount: Decimal
+-    original_amount: Decimal | None
+-    is_promo: bool
++    original: Decimal | None
+ 
+ 
+ @dataclass
+-class _RoomRow:
+-    room_text: str
+-    room_code: str
++class _Room:
++    raw: str
++    code: str
+     adults: int
+     extra: int
+-    prices_per_col: list[list[_PriceEntry]]  # indeks odgovara _PeriodCol listi
++    #: indeks u listi perioda -> cene za taj period
++    prices: dict[int, list[_Price]] = field(default_factory=dict)
++
++
++@dataclass
++class _Object:
++    """Jedan smeštajni objekat sa svim svojim sobama."""
++
++    name: str
++    rooms: list[_Room] = field(default_factory=list)
+ 
+ 
+ # ---------------------------------------------------------------------------
+-# Parsiranje
++# Parsiranje zaglavlja
+ # ---------------------------------------------------------------------------
+ 
+ 
+-def _transports_from_header(text: str) -> list[TransportType]:
+-    """'Sopstveni/Bus' → [OWN, BUS], 'Avio' → [PLANE], itd."""
+-    lower = text.lower()
+-    result: list[TransportType] = []
+-    if "sopstveni" in lower:
+-        result.append(TransportType.OWN)
+-    if "bus" in lower:
+-        result.append(TransportType.BUS)
+-    if "avio" in lower:
+-        result.append(TransportType.PLANE)
+-    return result or [TransportType.OWN]
++def _transports(text: str) -> tuple[TransportType, ...]:
++    lowered = text.lower()
++    found = [kind for word, kind in _TRANSPORT_WORDS if word in lowered]
++    return tuple(found) or (TransportType.OWN,)
+ 
+ 
+-def _dates_from_header(text: str, year: int) -> tuple[date, date] | None:
+-    """'28.08.-07.09.' + year → (date(year,8,28), date(year,9,7))."""
+-    found = _DATE_PAT.findall(text)
+-    if len(found) < 2:
++def _period_from_header(text: str, year: int) -> _Period | None:
++    """`11 dana/10 noci Termin boravka 28.08.-07.09. Sopstveni prevoz/Bus prevoz`."""
++    match = _DATE_RANGE.search(text)
++    if not match:
+         return None
++
++    day_from, month_from, day_to, month_to = (int(g) for g in match.groups())
++    year_to = year if month_to >= month_from else year + 1
+     try:
+-        d1, m1 = int(found[0][0]), int(found[0][1])
+-        d2, m2 = int(found[1][0]), int(found[1][1])
+-        # Prelaz godine: aug→sep je OK, dec→jan treba +1
+-        y1 = year
+-        y2 = year if m2 >= m1 else year + 1
+-        return date(y1, m1, d1), date(y2, m2, d2)
++        start = date(year, month_from, day_from)
++        end = date(year_to, month_to, day_to)
+     except ValueError:
+         return None
+ 
++    nights_match = _NIGHTS.search(text)
++    if nights_match:
++        nights = int(nights_match.group(1))
++    else:
++        days_match = _DAYS.search(text)
++        nights = int(days_match.group(1)) - 1 if days_match else (end - start).days
+ 
+-def _parse_price_cell(text: str, col: _PeriodCol) -> list[_PriceEntry]:
+-    """Parsira tekst ćelije i vraća listu cena po tipu prevoza.
++    return _Period(start, end, nights, _transports(text))
+ 
+-    Format: "209€ (235€) / 275€ (305€)"
+-    "/" deli tipove prevoza u redosledu col.transports.
+-    "(X€)" je regularna cena, prva je last-minute.
+-    Ako ćelija sadrži samo "/" ili je prazna, ponuda nije dostupna.
+-    """
++
++def _parse_header(table: Node, year: int) -> list[_Period]:
++    row = table.css_first("thead tr") or table.css_first("tr")
++    if row is None:
++        return []
++    # Prve dve kolone su uvek "Objekat" i "Soba".
++    cells = row.css("th, td")[2:]
++    periods = [_period_from_header(_cell_text(cell), year) for cell in cells]
++    return [p for p in periods if p is not None]
++
++
++# ---------------------------------------------------------------------------
++# Parsiranje cena
++# ---------------------------------------------------------------------------
++
++
++def _to_decimal(raw: str | None) -> Decimal | None:
++    if not raw or raw.lower() == "x":
++        return None
++    try:
++        return Decimal(raw.replace(",", "."))
++    except InvalidOperation:
++        return None
++
++
++def _parse_price_cell(text: str, period: _Period) -> list[_Price]:
++    """Razlaže ćeliju na cene, po jedna za svaki prevoz iz zaglavlja kolone."""
+     text = text.strip()
+-    # Ćelija "/" ili prazna = nedostupno
+-    if not text or text == "/" or text.lower() == "x":
++    if not text or text == "/":
+         return []
+ 
+-    # Delimo po " / " (sa razmacima) da ne bismo razbili "1/2" u sifri sobe
+-    parts = re.split(r"\s+/\s+", text)
++    # Delimo na "/" jer u cenovnoj ćeliji nema oznaka soba tipa "1/2".
++    # Broj delova prati zaglavlje: dva prevoza -> dva dela, jedan prevoz -> jedan.
++    parts = [p.strip() for p in text.split("/")]
++    out: list[_Price] = []
+ 
+-    entries: list[_PriceEntry] = []
+-    for i, (part, transport) in enumerate(zip(parts, col.transports)):
+-        part = part.strip()
+-        if not part or part == "/" or "x€" in part.lower():
+-            continue
+-        m = _PRICE_PAT.search(part)
+-        if not m:
++    # strict=False je namerno: ćelija sme imati manje delova nego što zaglavlje
++    # najavljuje (npr. '265€ (x€) / 335€' gde drugi deo nema zagradu).
++    for part, transport in zip(parts, period.transports, strict=False):
++        if not part:
+             continue
+-        try:
+-            lm_price = Decimal(m.group(1))
+-            reg_price = Decimal(m.group(2)) if m.group(2) else None
+-        except InvalidOperation:
++        match = _PRICE.search(part)
++        if not match:
+             continue
+-        if lm_price <= 0:
++        amount = _to_decimal(match.group(1))
++        if amount is None or amount <= 0:
+             continue
+-        entries.append(_PriceEntry(
+-            transport=transport,
+-            amount=lm_price,
+-            original_amount=reg_price,
+-            is_promo=reg_price is not None,
+-        ))
+-
+-    return entries
+-
+-
+-def _parse_room(room_text: str) -> tuple[str, int, int]:
+-    """'Studio 1/3+1 dvorište' → ('1/3+1', adults=3, extra=1)."""
+-    m = _ROOM_CAP_PAT.search(room_text)
+-    if m:
+-        adults = int(m.group(1))
+-        extra = int(m.group(2) or 0)
+-        room_code = f"1/{adults}" + (f"+{extra}" if extra else "")
+-        return room_code, adults, extra
+-    # Nema standardne šifre (npr. "Superior" soba u hotelu)
+-    return room_text[:20].strip(), 2, 0
+-
+-
+-def _accommodation_kind(obj_name: str) -> AccommodationKind:
+-    lower = obj_name.lower()
+-    if "hotel" in lower:
+-        return AccommodationKind.HOTEL
+-    if "vila" in lower or "villa" in lower:
+-        return AccommodationKind.VILLA
+-    return AccommodationKind.APARTMENT
+-
++        out.append(_Price(transport, amount, _to_decimal(match.group(2))))
+ 
+-def _safe_slug(text: str) -> str:
+-    return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
++    return out
+ 
+ 
+ # ---------------------------------------------------------------------------
+-# Parsiranje stranice
++# Parsiranje tela tabele
+ # ---------------------------------------------------------------------------
+ 
+ 
+-def parse_price_page(html: str, default_year: int = 2026) -> list[OfferIn]:
+-    """Parsira /lm/display_prices.php i vraća sve ponude.
++def _cell_text(cell: Node) -> str:
++    """Tekst ćelije sa razmakom umesto `<br>`, bez višestrukih razmaka."""
++    return " ".join(cell.text(separator=" ", strip=True).split())
+ 
+-    Koristi se i u adapteru i u unit testovima.
+-    """
+-    tree = HTMLParser(html)
+-    offers: list[OfferIn] = []
+ 
+-    # VERIFIKUJ LOKALNO: koji tag nosi naslov destinacije (h2, h3, strong, ...)?
+-    # Pretpostavljamo da svaka sekcija počinje h2 ili h3 sa imenom destinacije i godinom.
+-    # Sekcija je praćena <table> koji sledi neposredno.
+-    #
+-    # Prolazimo sve elemente po redu i pratimo kontekst.
+-
+-    current_dest = "Grčka"
+-    current_year = default_year
+-
+-    # Gradimo mapu: tražimo sve h2/h3 i sve table u DOM redosledu.
+-    # selectolax daje elemente u document-order pa iteriramo body.
+-    body = tree.css_first("body") or tree.root
+-
+-    for node in body.iter():
+-        tag = node.tag if hasattr(node, "tag") else ""
+-
+-        # Naslov sekcije — detektujemo destinaciju i godinu
+-        if tag in ("h2", "h3", "h4"):
+-            text = node.text(strip=True)
+-            m_year = _YEAR_PAT.search(text)
+-            if m_year:
+-                current_year = int(m_year.group(1))
+-            # Čistimo "leto YYYY" i slično da dobijemo samo ime destinacije
+-            dest = re.sub(r"\s*(leto|zima|letovanje|zimovanje)\s*\d{4}", "", text, flags=re.IGNORECASE).strip()
+-            if dest:
+-                current_dest = dest
+-
+-        # Tabela cena
+-        if tag != "table":
+-            continue
++def _object_name(cell: Node) -> str:
++    heading = cell.css_first("h6")
++    return _cell_text(heading) if heading is not None else _cell_text(cell)
+ 
+-        period_cols = _parse_header(node, current_year)
+-        if not period_cols:
+-            continue
+ 
+-        object_rows = _parse_body(node, period_cols)
+-        if not object_rows:
+-            continue
++def _parse_body(table: Node, periods: list[_Period]) -> list[_Object]:
++    """Grupiše redove po objektu, poštujući `rowspan` na prvoj ćeliji.
+ 
+-        for obj_name, rows in object_rows.items():
+-            _build_offer(
+-                obj_name=obj_name,
+-                rows=rows,
+-                period_cols=period_cols,
+-                destination=current_dest,
+-                offers=offers,
+-            )
++    Ključ: broj ćelija u redu kaže da li red počinje imenom objekta.
++    Pun red ima `2 + len(periods)` ćelija, nastavak ima jednu manje.
++    """
++    rows = table.css("tbody tr") or table.css("tr")[1:]
++    expected_full = 2 + len(periods)
+ 
+-    return offers
++    objects: list[_Object] = []
++    current: _Object | None = None
+ 
++    for row in rows:
++        cells = row.css("td, th")
++        if not cells:
++            continue
+ 
+-def _parse_header(table: Node, year: int) -> list[_PeriodCol]:
+-    """Izvlači kolone perioda iz <thead> ili prvog <tr>."""
+-    # VERIFIKUJ LOKALNO: thead vs tbody, colspan tretman
+-    header_row = table.css_first("thead tr") or table.css_first("tr")
+-    if not header_row:
+-        return []
++        starts_object = len(cells) >= expected_full
++        if starts_object:
++            name = _object_name(cells[0])
++            if not name:
++                continue
++            current = _Object(name=name)
++            objects.append(current)
++            room_cell, price_cells = cells[1], cells[2:]
++        else:
++            if current is None:
++                # Tabela počinje nastavkom — podaci su neupotrebljivi, preskačemo.
++                continue
++            room_cell, price_cells = cells[0], cells[1:]
+ 
+-    cells = header_row.css("th, td")
+-    # Prve 2 kolone su "Objekat" i "Soba"
+-    period_cols: list[_PeriodCol] = []
+-    for cell in cells[2:]:
+-        text = cell.text(strip=True)
+-        if not text:
++        room_raw = _cell_text(room_cell)
++        if not room_raw:
+             continue
+-        dates = _dates_from_header(text, year)
+-        if not dates:
+-            continue
+-        start_dt, end_dt = dates
+ 
+-        # Broj noći iz zaglavlja ili iz razlike datuma
+-        m = _NIGHTS_PAT.search(text)
+-        nights = int(m.group(1)) - 1 if m else (end_dt - start_dt).days
++        capacity = parse_room_code(room_raw)
++        room = _Room(
++            raw=room_raw,
++            code=_room_code(room_raw, capacity.adults, capacity.extra),
++            adults=capacity.adults,
++            extra=capacity.extra,
++        )
+ 
+-        transports = _transports_from_header(text)
+-        period_cols.append(_PeriodCol(
+-            start_date=start_dt,
+-            end_date=end_dt,
+-            nights=nights,
+-            transports=transports,
+-        ))
++        for index, period in enumerate(periods):
++            if index >= len(price_cells):
++                break
++            prices = _parse_price_cell(_cell_text(price_cells[index]), period)
++            if prices:
++                room.prices[index] = prices
+ 
+-    return period_cols
++        if room.prices:
++            current.rooms.append(room)
+ 
++    return [obj for obj in objects if obj.rooms]
+ 
+-def _parse_body(
+-    table: Node, period_cols: list[_PeriodCol]
+-) -> dict[str, list[_RoomRow]]:
+-    """Grupisanje redova po imenu objekta."""
+-    result: dict[str, list[_RoomRow]] = {}
+-    current_obj: str | None = None
+ 
+-    body_rows = table.css("tbody tr") or table.css("tr")[1:]
++def _room_code(raw: str, adults: int, extra: int) -> str:
++    """`Studio 1/3+1 dvoriste D1 i D2` -> `1/3+1`."""
++    match = re.search(r"\d\s*/\s*\d(?:\s*\+\s*\d)?", raw)
++    if match:
++        return match.group(0).replace(" ", "")
++    return f"1/{adults}" + (f"+{extra}" if extra else "")
+ 
+-    for tr in body_rows:
+-        cells = tr.css("td, th")
+-        if len(cells) < 3:
+-            continue
+ 
+-        obj_text = cells[0].text(strip=True)
+-        room_text = cells[1].text(strip=True)
++# ---------------------------------------------------------------------------
++# Sklapanje ponuda
++# ---------------------------------------------------------------------------
++
++
++def _kind(name: str) -> AccommodationKind:
++    lowered = name.lower()
++    if "hotel" in lowered:
++        return AccommodationKind.HOTEL
++    if "vila" in lowered or "villa" in lowered:
++        return AccommodationKind.VILLA
++    if "mezoneta" in lowered or "apartman" in lowered or "studio" in lowered:
++        return AccommodationKind.APARTMENT
++    return AccommodationKind.OTHER
++
++
++_TRANSPORT_SUFFIX = {
++    TransportType.OWN: "own",
++    TransportType.BUS: "bus",
++    TransportType.PLANE: "avio",
++    TransportType.TRAIN: "voz",
++}
++
++_TRANSPORT_LABEL = {
++    TransportType.OWN: "sopstveni prevoz",
++    TransportType.BUS: "bus",
++    TransportType.PLANE: "avion",
++    TransportType.TRAIN: "voz",
++}
++
++
++def _build_offers(obj: _Object, periods: list[_Period], destination: str) -> list[OfferIn]:
++    """Jedan objekat -> po jedna ponuda za svaki tip prevoza koji se u njemu javlja."""
++    # transport -> {indeks perioda -> [(soba, cena)]}
++    grouped: dict[TransportType, dict[int, list[tuple[_Room, _Price]]]] = {}
++    for room in obj.rooms:
++        for index, prices in room.prices.items():
++            for price in prices:
++                grouped.setdefault(price.transport, {}).setdefault(index, []).append((room, price))
++
++    offers: list[OfferIn] = []
++    base_slug = slugify(f"{destination}-{obj.name}")
++
++    for transport, by_period in grouped.items():
++        departures: list[DepartureIn] = []
++
++        for index, pairs in sorted(by_period.items()):
++            period = periods[index]
++            departures.append(
++                DepartureIn(
++                    external_id=f"{period.start_date:%Y%m%d}-{_TRANSPORT_SUFFIX[transport]}",
++                    start_date=period.start_date,
++                    end_date=period.end_date,
++                    nights=period.nights,
++                    transport_type=transport,
++                    board_type=BoardType.RO,
++                    is_last_minute=True,
++                    prices=[
++                        PriceIn(
++                            room_code=room.code,
++                            room_name=room.raw,
++                            capacity_adults=room.adults,
++                            capacity_extra=room.extra,
++                            slot=PriceSlot.ADULT,
++                            pricing_basis=PricingBasis.PER_PERSON_PER_STAY,
++                            board_type=BoardType.RO,
++                            amount=price.amount,
++                            original_amount=price.original,
++                            # Popust postoji samo ako je puna cena zaista veća.
++                            # Na sajtu se javlja i obrnut slučaj, npr. 619€ (585€).
++                            is_promo=price.original is not None and price.original > price.amount,
++                            currency="EUR",
++                        )
++                        for room, price in pairs
++                    ],
++                )
++            )
+ 
+-        if obj_text:
+-            current_obj = obj_text
+-        if not current_obj or not room_text:
++        if not departures:
+             continue
+ 
+-        prices_per_col: list[list[_PriceEntry]] = []
+-        for i, col in enumerate(period_cols):
+-            cell_idx = i + 2
+-            if cell_idx >= len(cells):
+-                prices_per_col.append([])
+-                continue
+-            cell_text = cells[cell_idx].text(strip=True)
+-            prices_per_col.append(_parse_price_cell(cell_text, col))
+-
+-        room_code, adults, extra = _parse_room(room_text)
+-        row = _RoomRow(
+-            room_text=room_text,
+-            room_code=room_code,
+-            adults=adults,
+-            extra=extra,
+-            prices_per_col=prices_per_col,
++        offers.append(
++            OfferIn(
++                source_slug=SoleAzurAdapter.source_slug,
++                external_id=f"{base_slug}__{_TRANSPORT_SUFFIX[transport]}",
++                product_kind=ProductKind.PACKAGE,
++                title=f"{obj.name}, {destination} — {_TRANSPORT_LABEL[transport]}",
++                url=_PRICES_URL,
++                country_raw="Grčka",
++                destination_raw=destination,
++                transport_type=transport,
++                board_type=BoardType.RO,
++                currency="EUR",
++                accommodation=AccommodationIn(
++                    name=obj.name,
++                    kind=_kind(obj.name),
++                    destination_raw=destination,
++                    external_id=slugify(obj.name),
++                ),
++                departures=departures,
++                raw_attributes={"last_minute": True, "cenovnik": "lm/display_prices.php"},
++            )
+         )
+ 
+-        if current_obj not in result:
+-            result[current_obj] = []
+-        result[current_obj].append(row)
++    return offers
+ 
+-    return result
+ 
++def parse_price_page(html: str, default_year: int = 2026) -> list[OfferIn]:
++    """Parsira ceo `/lm/display_prices.php`. Koriste je i adapter i testovi."""
++    tree = HTMLParser(html)
++    offers: list[OfferIn] = []
+ 
+-def _build_offer(
+-    obj_name: str,
+-    rows: list[_RoomRow],
+-    period_cols: list[_PeriodCol],
+-    destination: str,
+-    offers: list[OfferIn],
+-) -> None:
+-    """Gradi OfferIn i dodaje u listu."""
+-    departures: list[DepartureIn] = []
++    # Redosled dokumenta je OBAVEZAN — naslov destinacije važi za tabelu koja
++    # ga sledi. `css("h2, table")` NE vraća redosled dokumenta nego prvo sve h2
++    # pa sve table, pa bi svaka tabela dobila poslednju destinaciju.
++    # `traverse()` obilazi stablo u redosledu dokumenta.
++    destination = "Grčka"
++    year = default_year
+ 
+-    for row in rows:
+-        for col_idx, (col, price_entries) in enumerate(zip(period_cols, row.prices_per_col)):
+-            if not price_entries:
+-                continue
+-            for entry in price_entries:
+-                dep_ext_id = (
+-                    f"soleazur_{_safe_slug(obj_name)}"
+-                    f"_{col.start_date.strftime('%Y%m%d')}"
+-                    f"_{entry.transport.value}"
+-                )
+-                price = PriceIn(
+-                    room_code=row.room_code,
+-                    room_name=row.room_text,
+-                    capacity_adults=row.adults,
+-                    capacity_extra=row.extra,
+-                    slot=PriceSlot.ADULT,
+-                    pricing_basis=PricingBasis.PER_PERSON_PER_STAY,
+-                    amount=entry.amount,
+-                    original_amount=entry.original_amount,
+-                    is_promo=entry.is_promo,
+-                    min_stay_nights=col.nights,
+-                )
+-                dep = DepartureIn(
+-                    external_id=dep_ext_id,
+-                    start_date=col.start_date,
+-                    end_date=col.end_date,
+-                    nights=col.nights,
+-                    transport_type=entry.transport,
+-                    is_last_minute=True,
+-                    prices=[price],
+-                )
+-                departures.append(dep)
+-
+-    if not departures:
+-        return
+-
+-    ext_id = f"soleazur_{_safe_slug(destination)}_{_safe_slug(obj_name)}"
+-
+-    offer = OfferIn(
+-        source_slug="soleazur-grcka",
+-        external_id=ext_id,
+-        product_kind=ProductKind.PACKAGE,
+-        title=f"{obj_name} — {destination}",
+-        url=_PRICES_URL,
+-        country_raw="Grčka",
+-        destination_raw=destination,
+-        accommodation=AccommodationIn(
+-            name=obj_name,
+-            kind=_accommodation_kind(obj_name),
+-            destination_raw=destination,
+-            external_id=ext_id,
+-        ),
+-        departures=departures,
+-    )
+-    offers.append(offer)
++    for node in tree.root.traverse(include_text=False):
++        if node.tag not in ("h2", "table"):
++            continue
++        if node.tag == "h2":
++            text = _cell_text(node)
++            match = _YEAR.search(text)
++            if match:
++                year = int(match.group(1))
++            name = _SUFFIX.sub("", text).strip()
++            if name:
++                destination = name
++            continue
+ 
++        periods = _parse_header(node, year)
++        if not periods:
++            continue
++        for obj in _parse_body(node, periods):
++            offers.extend(_build_offers(obj, periods, destination))
+ 
+-# ---------------------------------------------------------------------------
+-# Adapter
+-# ---------------------------------------------------------------------------
++    return offers
+ 
+ 
+ @register
+ class SoleAzurAdapter(BaseAdapter):
+-    """Adapter za soleazur.rs — last-minute ponude za Grčku.
+-
+-    Jedan GET na /lm/display_prices.php daje sve ponude.
+-    Bez paginacije. Crawl runda = jedna stranica.
+-    """
++    """Jedan GET na `/lm/display_prices.php` daje ceo katalog. Bez paginacije."""
+ 
+-    source_slug = "soleazur-grcka"
+-    allowed_domains = {"soleazur.rs", "www.soleazur.rs"}
++    source_slug: ClassVar[str] = "soleazur-grcka"
++    allowed_domains: ClassVar[set[str]] = {"soleazur.rs", "www.soleazur.rs"}
++    expected_min_items: ClassVar[int] = 20
+ 
+     async def scrape(self, fetcher: HttpFetcher) -> AsyncGenerator[OfferIn, None]:
+         html = await fetcher.get(_PRICES_URL)
+-        offers = parse_price_page(html)
+-        for offer in offers:
++        for offer in parse_price_page(html):
+             yield offer
+diff --git a/apps/scrapers/tests/fixtures/oktopod/putovanje_vila_penny.html b/apps/scrapers/tests/fixtures/oktopod/putovanje_vila_penny.html
+new file mode 100644
+index 0000000..5083bf9
+--- /dev/null
++++ b/apps/scrapers/tests/fixtures/oktopod/putovanje_vila_penny.html
+@@ -0,0 +1,57 @@
++<!doctype html>
++<html lang="sr"><head><meta charset="utf-8"><title>VILA PENNY / HANIOTI — Oktopod Travel</title></head>
++<body>
++<!--
++  Fixture snimljen sa https://www.oktopod.rs/sr/putovanje/vila-penny-hanioti/8339
++  dana 16.08.2026. kroz pravi Chrome, iz DOM-a.
++
++  Zadrzano doslovno: klase tabela, colspan/rowspan, i sav tekst celija.
++  Uklonjeno: sve osim dve cenovne tabele.
++  Skraceno: broj perioda je smanjen sa 13 i 19 na 5, da fixture ostane citljiv.
++            Struktura je netaknuta.
++
++  STRUKTURA, potvrdjena u browseru:
++
++  Obe tabele imaju class="CSSTableGenerator" i identican oblik:
++    red 0  <td colspan=N>  naslov paketa
++    red 1  <td rowspan=3>Struktura</td> <td rowspan=3>Broj pomocnih lezaja</td>
++           <td rowspan=3>Broj plativih osoba</td> <td colspan=M>PERIOD BORAVKA / BROJ NOCENJA</td>
++    red 2  broj nocenja po periodu (svi isti)
++    red 3  datumi perioda, oblik "20.05. 30.05." (dva datuma, bez crtice)
++    red 4+ podaci: struktura, pomocni lezaji, plative osobe, pa cena po periodu
++
++  VAZNO, razlikuje se od prve pretpostavke:
++    - Dve tabele NISU dva prevoza nego dve DUZINE boravka: 10 noci i 7 noci.
++      Obe nose naslov "PAKET ARANZMAN (apartmanski smestaj i autobuski prevoz)",
++      dakle obe su BUS. Cena za sopstveni prevoz se ne objavljuje u tabeli nego
++      se dobija kroz formu ("Tip prevoza: Agencijski prevoz (autobus) / Sopstveni prevoz").
++    - "Broj plativih osoba" je zlata vredan: za "1/3+1 STD" pise 4, sto znaci da
++      se cena mnozi sa 4, a ne sa 3. Kapacitet ne moramo da izvodimo iz oznake.
++    - "-" u koloni pomocnih lezaja znaci nula.
++    - "*" iza cene oznacava uslovan period (fusnota ispod tabele na sajtu).
++    - "1/2 STD RENOV*" - zvezdica je deo IMENA strukture, ne cene.
++-->
++
++<table class="CSSTableGenerator">
++<tbody>
++<tr><td colspan="8">PAKET ARANŽMAN (apartmanski smeštaj i autobuski prevoz)</td></tr>
++<tr><td rowspan="3">Struktura</td><td rowspan="3">Broj pomoćnih ležaja</td><td rowspan="3">Broj plativih osoba</td><td colspan="5">PERIOD BORAVKA / BROJ NOĆENJA</td></tr>
++<tr><td>10</td><td>10</td><td>10</td><td>10</td><td>10</td></tr>
++<tr><td>20.05. 30.05.</td><td>30.05. 09.06.</td><td>09.06. 19.06.</td><td>28.08. 07.09.</td><td>17.09. 27.09.</td></tr>
++<tr><td>1/2 STD</td><td>-</td><td>2</td><td>170*</td><td>200</td><td>265</td><td>330</td><td>210*</td></tr>
++<tr><td>1/2 STD RENOV*</td><td>-</td><td>2</td><td>180*</td><td>210</td><td>285</td><td>360</td><td>230*</td></tr>
++<tr><td>1/3 STD</td><td>-</td><td>3</td><td>145*</td><td>170</td><td>225</td><td>280</td><td>180*</td></tr>
++<tr><td>1/3+1 STD</td><td>1</td><td>4</td><td>130*</td><td>150</td><td>200</td><td>250</td><td>160*</td></tr>
++</tbody></table>
++
++<table class="CSSTableGenerator">
++<tbody>
++<tr><td colspan="8">PAKET ARANŽMAN (apartmanski smeštaj i autobuski prevoz)</td></tr>
++<tr><td rowspan="3">Struktura</td><td rowspan="3">Broj pomoćnih ležaja</td><td rowspan="3">Broj plativih osoba</td><td colspan="5">PERIOD BORAVKA / BROJ NOĆENJA</td></tr>
++<tr><td>7</td><td>7</td><td>7</td><td>7</td><td>7</td></tr>
++<tr><td>25.05. 01.06.</td><td>01.06. 08.06.</td><td>08.06. 15.06.</td><td>03.08. 10.08.</td><td>21.09. 28.09.</td></tr>
++<tr><td>1/2 STD</td><td>-</td><td>2</td><td>160*</td><td>170</td><td>195</td><td>420</td><td>180*</td></tr>
++<tr><td>1/3 STD</td><td>-</td><td>3</td><td>135*</td><td>145</td><td>165</td><td>330</td><td>150*</td></tr>
++<tr><td>1/3+1 STD</td><td>1</td><td>4</td><td>120*</td><td>130</td><td>145</td><td>290</td><td>140*</td></tr>
++</tbody></table>
++</body></html>
+diff --git a/apps/scrapers/tests/fixtures/soleazur/display_prices.html b/apps/scrapers/tests/fixtures/soleazur/display_prices.html
+new file mode 100644
+index 0000000..9b4776a
+--- /dev/null
++++ b/apps/scrapers/tests/fixtures/soleazur/display_prices.html
+@@ -0,0 +1,50 @@
++<!doctype html>
++<html lang="sr"><head><meta charset="utf-8"><title>Pregled Cena Hotela</title></head>
++<body>
++<!--
++  Fixture snimljen sa https://soleazur.rs/lm/display_prices.php dana 16.08.2026.
++  kroz pravi Chrome, iz DOM-a.
++
++  Sta je zadrzano DOSLOVNO: struktura tabele, klase, <br> u zaglavlju, rowspan,
++  <h6><a> za ime hotela, i svi tekstualni sadrzaji celija.
++
++  Sta je uklonjeno: href i src atributi (fixture ne sme da nosi zive URL-ove),
++  skripte i CSS koji je ubacila browser ekstenzija, i osam od deset sekcija
++  koje ponavljaju vec pokrivene obrasce.
++
++  Zadrzane su dve sekcije jer zajedno pokrivaju SVE strukturne slucajeve:
++
++  Neos Marmaras  - dve kolone, oba prevoza u istoj celiji (Sopstveni/Bus)
++                 - rowspan=3 na imenu objekta
++                 - celija "/" = nema ponude
++                 - "265€ (x€) / 335€" = puna cena nepoznata, bus bez zagrade
++
++  Kefalonija     - TRI kolone sa RAZLICITIM prevozom po koloni
++                 - razlicito trajanje po koloni (10 i 11 noci)
++                 - jedan prevoz po celiji, dakle bez "/" razdvajanja
++                 - "x€ (x€)" = obe cene nepoznate
++                 - "619€ (585€)" = puna cena NIZA od akcijske, greska u podacima
++                   na sajtu; adapter ne sme da pretpostavi original > amount
++-->
++<h2>Neos Marmaras leto 2026</h2>
++<table class="table table-bordered table-sm">
++<thead class="table-light"><tr><th>Objekat</th><th>Soba</th><th>11 dana/10 noci<br>Termin boravka 28.08.-07.09.<br>Sopstveni prevoz/Bus prevoz</th><th>11 dana/10 noci<br>Termin boravka 07.09.-17.09.<br>Sopstveni prevoz/Bus prevoz</th></tr></thead>
++<tbody>
++<tr><td rowspan="3"><h6><a>Ridos house</a></h6></td><td>Studio 1/3+1 dvoriste D1 i D2</td><td>/</td><td>209€ (235€) / 275€ (305€)</td></tr>
++<tr><td>Mezoneta 1/4</td><td>265€ (x€) / 335€</td><td>/</td></tr>
++<tr><td>Mezoneta 1/4+1</td><td>215€ (255€) / 285€ (335€)</td><td>/</td></tr>
++</tbody></table>
++
++<h2>Kefalonija letovanje 2026</h2>
++<table class="table table-bordered table-sm">
++<thead class="table-light"><tr><th>Objekat</th><th>Soba</th><th>11 dana/10 noci<br>Termin boravka 22.08.-01.09.<br>Sopstveni prevoz</th><th>12 dana/11 noci<br>Termin boravka 25.08.-05.09.<br>Avio prevoz</th><th>11 dana/10 noci<br>Termin boravka 29.08.-08.09.<br>Avio prevoz</th></tr></thead>
++<tbody>
++<tr><td rowspan="2"><h6><a>Andrew's studios</a></h6></td><td>Studio 1/2</td><td>359€ (449€)</td><td>675€ (759€)</td><td>/</td></tr>
++<tr><td>Studio 1/3</td><td>269€ (339€)</td><td>585€ (689€)</td><td>x€ (x€)</td></tr>
++<tr><td rowspan="2"><h6><a>Vila Eleanna</a></h6></td><td>Apartman 1/3</td><td>/</td><td>549€ (649€)</td><td>/</td></tr>
++<tr><td>Apartman 1/3+1</td><td>/</td><td>499€ (589€)</td><td>/</td></tr>
++<tr><td rowspan="2"><h6><a>Vila Zaharula, Lassi</a></h6></td><td>Studio 1/2</td><td>/</td><td>675€ (759€)</td><td>/</td></tr>
++<tr><td>Studio 1/3</td><td>279€ (349€)</td><td>619€ (585€)</td><td>585€ (659€)</td></tr>
++<tr><td><h6><a>Vila Aggelos</a></h6></td><td>Studio 1/2</td><td>/</td><td>/</td><td></td></tr>
++</tbody></table>
++</body></html>
+diff --git a/apps/scrapers/tests/test_soleazur.py b/apps/scrapers/tests/test_soleazur.py
+index 955b67a..286a3ee 100644
+--- a/apps/scrapers/tests/test_soleazur.py
++++ b/apps/scrapers/tests/test_soleazur.py
+@@ -1,242 +1,209 @@
+-"""Testovi za soleazur.rs adapter.
++"""Testovi za soleazur adapter, nad fixture-om snimljenim sa pravog sajta.
+ 
+-Testiraju parsiranje cena i strukture bez HTTP poziva.
+-Koristimo HTML fixture koji odgovara strukturi /lm/display_prices.php.
++Fixture: `tests/fixtures/soleazur/display_prices.html`, snimljen 16.08.2026.
++kroz Chrome, iz DOM-a. Sve vrednosti u ovim testovima su doslovno sa sajta.
+ 
+-NAPOMENA: Fixture je konstruisan na osnovu markdown-a koji WebFetch vraća.
+-Selektori (h2, thead, tbody) su PRETPOSTAVLJENI i treba ih verifikovati
+-lokalno pokretanjem: travelscrape snapshot soleazur-grcka https://soleazur.rs/lm/display_prices.php
++Testira se ono što ruši naivni parser:
++  - `rowspan` na imenu objekta (redovi nastavka imaju ćeliju manje)
++  - kolone sa jednim prevozom (bez `/`) uz kolone sa dva
++  - `/`, prazna ćelija i `x€` kao odsustvo cene
++  - puna cena niža od akcijske
+ """
+ 
+ from __future__ import annotations
+ 
++import pathlib
+ from datetime import date
+ from decimal import Decimal
+ 
+ import pytest
+ 
+-from travelscrape.adapters.soleazur import (
+-    _dates_from_header,
+-    _parse_price_cell,
+-    _parse_room,
+-    _transports_from_header,
+-    _PeriodCol,
+-    parse_price_page,
++from travelscrape.adapters.soleazur import parse_price_page
++from travelscrape.core.enums import (
++    BoardType,
++    PriceSlot,
++    PricingBasis,
++    ProductKind,
++    TransportType,
+ )
+-from travelscrape.core.enums import TransportType
+-
+-# ---------------------------------------------------------------------------
+-# Unit testovi parsiranja
+-# ---------------------------------------------------------------------------
+-
+-
+-class TestTransportFromHeader:
+-    def test_sopstveni_bus(self):
+-        result = _transports_from_header("11d/10n (28.08.-07.09.) Sopstveni/Bus")
+-        assert result == [TransportType.OWN, TransportType.BUS]
+-
+-    def test_avio_only(self):
+-        result = _transports_from_header("11d/10n (22.08.-01.09.) Avio")
+-        assert result == [TransportType.PLANE]
+-
+-    def test_lowercase(self):
+-        result = _transports_from_header("sopstveni/bus")
+-        assert TransportType.OWN in result
+-        assert TransportType.BUS in result
+-
+-
+-class TestDatesFromHeader:
+-    def test_standard(self):
+-        result = _dates_from_header("11d/10n (28.08.-07.09.) Sopstveni/Bus", 2026)
+-        assert result == (date(2026, 8, 28), date(2026, 9, 7))
+-
+-    def test_dec_to_jan(self):
+-        result = _dates_from_header("25.12.-04.01.", 2026)
+-        assert result == (date(2026, 12, 25), date(2027, 1, 4))
+-
+-    def test_no_dates(self):
+-        result = _dates_from_header("Objekat", 2026)
+-        assert result is None
+-
+-
+-class TestParsePriceCell:
+-    def _col(self, transports=None) -> _PeriodCol:
+-        return _PeriodCol(
+-            start_date=date(2026, 8, 28),
+-            end_date=date(2026, 9, 7),
+-            nights=10,
+-            transports=transports or [TransportType.OWN, TransportType.BUS],
+-        )
+-
+-    def test_sopstveni_bus_with_promo(self):
+-        entries = _parse_price_cell("209€ (235€) / 275€ (305€)", self._col())
+-        assert len(entries) == 2
+-        assert entries[0].transport == TransportType.OWN
+-        assert entries[0].amount == Decimal("209")
+-        assert entries[0].original_amount == Decimal("235")
+-        assert entries[0].is_promo is True
+-        assert entries[1].transport == TransportType.BUS
+-        assert entries[1].amount == Decimal("275")
+-        assert entries[1].original_amount == Decimal("305")
+-
+-    def test_unavailable_slash(self):
+-        entries = _parse_price_cell("/", self._col())
+-        assert entries == []
+-
+-    def test_empty_cell(self):
+-        entries = _parse_price_cell("", self._col())
+-        assert entries == []
+-
+-    def test_x_unavailable(self):
+-        entries = _parse_price_cell("x€ (235€) / 275€ (305€)", self._col())
+-        # "x€" nije broj, preskačemo
+-        assert len(entries) == 1
+-        assert entries[0].transport == TransportType.BUS
+-
+-    def test_no_promo(self):
+-        entries = _parse_price_cell("195€ / 259€", self._col())
+-        assert len(entries) == 2
+-        assert entries[0].original_amount is None
+-        assert entries[0].is_promo is False
+-
+-
+-class TestParseRoom:
+-    def test_studio_1_3_plus_1(self):
+-        code, adults, extra = _parse_room("Studio 1/3+1 dvorište")
+-        assert code == "1/3+1"
+-        assert adults == 3
+-        assert extra == 1
+-
+-    def test_standard_1_2(self):
+-        code, adults, extra = _parse_room("Studio 1/2")
+-        assert code == "1/2"
+-        assert adults == 2
+-        assert extra == 0
+-
+-    def test_mezoneta_1_4(self):
+-        code, adults, extra = _parse_room("Mezoneta 1/4")
+-        assert code == "1/4"
+-        assert adults == 4
+-        assert extra == 0
+-
+-    def test_no_standard_code(self):
+-        # Hoteli ponekad imaju "Superior" bez 1/N šifre
+-        code, adults, extra = _parse_room("Superior")
+-        assert adults == 2  # fallback
+-
+-
+-# ---------------------------------------------------------------------------
+-# Integralni test parsiranja HTML stranice
+-# ---------------------------------------------------------------------------
+-
+-FIXTURE_HTML = """
+-<!DOCTYPE html>
+-<html>
+-<body>
+-<h2>Neos Marmaras leto 2026</h2>
+-<table>
+-  <thead>
+-    <tr>
+-      <th>Objekat</th>
+-      <th>Soba</th>
+-      <th>11d/10n (28.08.-07.09.) Sopstveni/Bus</th>
+-      <th>11d/10n (07.09.-17.09.) Sopstveni/Bus</th>
+-    </tr>
+-  </thead>
+-  <tbody>
+-    <tr>
+-      <td>Ridos house</td>
+-      <td>Studio 1/3+1 dvorište D1</td>
+-      <td>209€ (235€) / 275€ (305€)</td>
+-      <td>/</td>
+-    </tr>
+-    <tr>
+-      <td></td>
+-      <td>Mezoneta 1/4</td>
+-      <td>265€ / 335€</td>
+-      <td>215€ (255€) / 285€ (335€)</td>
+-    </tr>
+-  </tbody>
+-</table>
+-
+-<h2>Nei Pori leto 2026</h2>
+-<table>
+-  <thead>
+-    <tr>
+-      <th>Objekat</th>
+-      <th>Soba</th>
+-      <th>11d/10n (23.08.-02.09.) Sopstveni/Bus</th>
+-      <th>11d/10n (02.09.-12.09.) Sopstveni/Bus</th>
+-    </tr>
+-  </thead>
+-  <tbody>
+-    <tr>
+-      <td>Vila Filio</td>
+-      <td>Studio 1/2</td>
+-      <td>229€ (289€) / 295€ (369€)</td>
+-      <td>195€ (229€) / 259€ (309€)</td>
+-    </tr>
+-  </tbody>
+-</table>
+-</body>
+-</html>
+-"""
++
++FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "soleazur" / "display_prices.html"
++
++
++@pytest.fixture(scope="module")
++def offers():
++    return parse_price_page(FIXTURE.read_text(encoding="utf-8"))
++
++
++def _find(offers, accommodation: str, transport: TransportType):
++    for offer in offers:
++        if offer.accommodation.name == accommodation and offer.transport_type is transport:
++            return offer
++    return None
++
++
++# --------------------------------------------------------------- osnovno
++
++
++def test_parsira_obe_destinacije(offers):
++    destinations = {offer.destination_raw for offer in offers}
++    assert destinations == {"Neos Marmaras", "Kefalonija"}
++
++
++def test_godina_se_cita_iz_naslova(offers):
++    assert all(dep.start_date.year == 2026 for offer in offers for dep in offer.departures)
++
++
++def test_svaka_ponuda_je_aranzman_sa_smestajem(offers):
++    assert all(offer.product_kind is ProductKind.PACKAGE for offer in offers)
++    assert all(offer.accommodation is not None for offer in offers)
++
++
++def test_usluga_je_najam(offers):
++    # Stranica hotela: "smeštaj 10 noćenja (usluga najam)".
++    assert all(offer.board_type is BoardType.RO for offer in offers)
++
++
++def test_cena_je_po_osobi(offers):
++    # Stranica hotela: "CENA ARANŽMANA PO OSOBI".
++    prices = [p for o in offers for d in o.departures for p in d.prices]
++    assert prices
++    assert all(p.slot is PriceSlot.ADULT for p in prices)
++    assert all(p.pricing_basis is PricingBasis.PER_PERSON_PER_STAY for p in prices)
++
++
++# --------------------------------------------------------------- rowspan
++
++
++def test_rowspan_ne_pomera_kolone(offers):
++    """Ridos house ima rowspan=3; sobe iz redova nastavka moraju imati tačne cene."""
++    offer = _find(offers, "Ridos house", TransportType.OWN)
++    assert offer is not None
++
++    # Mezoneta 1/4 je u DRUGOM redu, koji nema ćeliju objekta.
++    # Njena cena za sopstveni prevoz u prvom terminu je 265€.
++    departure = next(d for d in offer.departures if d.start_date == date(2026, 8, 28))
++    price = next(p for p in departure.prices if p.room_code == "1/4")
++    assert price.amount == Decimal("265")
++
++
++def test_sve_tri_sobe_ridos_house_su_pokupljene(offers):
++    codes = set()
++    for transport in (TransportType.OWN, TransportType.BUS):
++        offer = _find(offers, "Ridos house", transport)
++        if offer:
++            codes |= {p.room_code for d in offer.departures for p in d.prices}
++    assert codes == {"1/3+1", "1/4", "1/4+1"}
++
++
++def test_objekat_bez_rowspana_se_prepoznaje(offers):
++    """Vila Aggelos ima jednu sobu, pa ćelija objekta nema rowspan atribut.
++
++    Sve njene cene su `/` ili prazne, pa ponuda ne sme ni da nastane.
++    """
++    assert _find(offers, "Vila Aggelos", TransportType.OWN) is None
++    assert _find(offers, "Vila Aggelos", TransportType.PLANE) is None
++
++
++# --------------------------------------------------------------- cene i prevoz
++
++
++def test_dva_prevoza_u_istoj_celiji(offers):
++    """`209€ (235€) / 275€ (305€)` -> sopstveni 209, bus 275."""
++    own = _find(offers, "Ridos house", TransportType.OWN)
++    bus = _find(offers, "Ridos house", TransportType.BUS)
++    assert own is not None and bus is not None
++
++    def price_for(offer, start, code):
++        departure = next(d for d in offer.departures if d.start_date == start)
++        return next(p for p in departure.prices if p.room_code == code)
++
++    own_price = price_for(own, date(2026, 9, 7), "1/3+1")
++    bus_price = price_for(bus, date(2026, 9, 7), "1/3+1")
++
++    assert own_price.amount == Decimal("209")
++    assert own_price.original_amount == Decimal("235")
++    assert bus_price.amount == Decimal("275")
++    assert bus_price.original_amount == Decimal("305")
++
++
++def test_nepoznata_puna_cena_ne_obara_akcijsku(offers):
++    """`265€ (x€) / 335€` -> akcijska 265 bez pune cene."""
++    own = _find(offers, "Ridos house", TransportType.OWN)
++    departure = next(d for d in own.departures if d.start_date == date(2026, 8, 28))
++    price = next(p for p in departure.prices if p.room_code == "1/4")
++
++    assert price.amount == Decimal("265")
++    assert price.original_amount is None
++    assert price.is_promo is False
++
++
++def test_kolona_sa_jednim_prevozom(offers):
++    """Kefalonija ima kolone samo za avio; ćelija tada nema `/`."""
++    offer = _find(offers, "Andrew's studios", TransportType.PLANE)
++    assert offer is not None
++    departure = next(d for d in offer.departures if d.start_date == date(2026, 8, 25))
++    price = next(p for p in departure.prices if p.room_code == "1/2")
++    assert price.amount == Decimal("675")
++    assert departure.nights == 11  # "12 dana/11 noci"
++
++
++def test_razlicito_trajanje_po_koloni(offers):
++    offer = _find(offers, "Andrew's studios", TransportType.OWN)
++    departure = next(d for d in offer.departures if d.start_date == date(2026, 8, 22))
++    assert departure.nights == 10
++    assert departure.end_date == date(2026, 9, 1)
++
++
++def test_kosa_crta_ne_pravi_cenu(offers):
++    """Prvi termin za Ridos house 1/3+1 je `/` — ta soba ne sme biti u tom terminu."""
++    own = _find(offers, "Ridos house", TransportType.OWN)
++    departure = next(d for d in own.departures if d.start_date == date(2026, 8, 28))
++    assert all(p.room_code != "1/3+1" for p in departure.prices)
++
++
++def test_x_evra_se_preskace(offers):
++    """`x€ (x€)` za Andrew's studios 1/3 u trećoj koloni ne sme dati termin."""
++    offer = _find(offers, "Andrew's studios", TransportType.PLANE)
++    dates = {d.start_date for d in offer.departures}
++    assert date(2026, 8, 29) not in dates
++
++
++def test_puna_cena_niza_od_akcijske_nije_popust(offers):
++    """`619€ (585€)` je greška u podacima na sajtu; ne sme se označiti kao promo."""
++    offer = _find(offers, "Vila Zaharula, Lassi", TransportType.PLANE)
++    assert offer is not None
++    departure = next(d for d in offer.departures if d.start_date == date(2026, 8, 25))
++    price = next(p for p in departure.prices if p.room_code == "1/3")
++
++    assert price.amount == Decimal("619")
++    assert price.original_amount == Decimal("585")
++    assert price.is_promo is False
++
++
++# --------------------------------------------------------------- identitet
++
++
++def test_jedan_offer_po_prevozu(offers):
++    ids = {o.external_id for o in offers if o.accommodation.name == "Ridos house"}
++    assert ids == {"neos-marmaras-ridos-house__own", "neos-marmaras-ridos-house__bus"}
++
++
++def test_nema_dva_termina_sa_istim_datumima_u_istoj_ponudi(offers):
++    """Baza ima UNIQUE (offer_id, start_date, end_date, departure_place_raw)."""
++    for offer in offers:
++        keys = [(d.start_date, d.end_date, d.departure_place_raw) for d in offer.departures]
++        assert len(keys) == len(set(keys)), f"duplirani termin u {offer.external_id}"
++
++
++def test_external_id_je_stabilan():
++    """Dva parsiranja istog HTML-a daju iste identifikatore."""
++    html = FIXTURE.read_text(encoding="utf-8")
++    first = {o.external_id for o in parse_price_page(html)}
++    second = {o.external_id for o in parse_price_page(html)}
++    assert first == second
+ 
+ 
+-class TestParsePricePage:
+-    def test_finds_two_offers(self):
+-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
+-        assert len(offers) == 2
+-
+-    def test_ridos_house_offer(self):
+-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
+-        ridos = next(o for o in offers if "Ridos" in o.title)
+-        assert ridos.destination_raw == "Neos Marmaras"
+-        assert ridos.country_raw == "Grčka"
+-        assert ridos.accommodation is not None
+-        assert ridos.accommodation.name == "Ridos house"
+-
+-    def test_ridos_departures_count(self):
+-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
+-        ridos = next(o for o in offers if "Ridos" in o.title)
+-        # Studio 1/3+1: period1 ima OWN+BUS, period2 nema ("/")
+-        # Mezoneta 1/4: period1 ima OWN+BUS, period2 ima OWN+BUS
+-        # Ukupno: 2 + 4 = 6 departure redova
+-        assert len(ridos.departures) == 6
+-
+-    def test_dates_correct(self):
+-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
+-        ridos = next(o for o in offers if "Ridos" in o.title)
+-        start_dates = {d.start_date for d in ridos.departures}
+-        assert date(2026, 8, 28) in start_dates
+-
+-    def test_transport_types(self):
+-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
+-        ridos = next(o for o in offers if "Ridos" in o.title)
+-        transports = {d.transport_type for d in ridos.departures}
+-        assert TransportType.OWN in transports
+-        assert TransportType.BUS in transports
+-
+-    def test_is_last_minute(self):
+-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
+-        for offer in offers:
+-            for dep in offer.departures:
+-                assert dep.is_last_minute is True
+-
+-    def test_promo_price(self):
+-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
+-        ridos = next(o for o in offers if "Ridos" in o.title)
+-        promo_deps = [d for d in ridos.departures if d.prices and d.prices[0].is_promo]
+-        # Studio i Mezoneta sa (regularnom) cenom
+-        assert len(promo_deps) > 0
+-
+-    def test_vila_filio_both_periods(self):
+-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
+-        vila = next(o for o in offers if "Vila Filio" in o.title)
+-        # Studio 1/2: 2 perioda × 2 prevoza = 4 departures
+-        assert len(vila.departures) == 4
+-
+-    def test_source_slug(self):
+-        offers = parse_price_page(FIXTURE_HTML, default_year=2026)
+-        for offer in offers:
+-            assert offer.source_slug == "soleazur-grcka"
++def test_oznake_soba_prolaze_kroz_normalizator(offers):
++    codes = {p.room_code for o in offers for d in o.departures for p in d.prices}
++    assert codes <= {"1/2", "1/3", "1/3+1", "1/4", "1/4+1"}
+diff --git a/docs/recon/oktopod.md b/docs/recon/oktopod.md
+index 388909e..780fdde 100644
+--- a/docs/recon/oktopod.md
++++ b/docs/recon/oktopod.md
+@@ -77,3 +77,35 @@ _nije utvrđeno u ovom reconu_
+ - WebFetch oktopod.rs/robots.txt (404)
+ - WebFetch /sr/nei-pori/453
+ - WebFetch /sr/putovanje/vila-penny-hanioti/8339
++
++
++---
++
++## Dopuna 16.08.2026. — fixture snimljen
++
++Fixture: `apps/scrapers/tests/fixtures/oktopod/putovanje_vila_penny.html`
++Izvor: `https://www.oktopod.rs/sr/putovanje/vila-penny-hanioti/8339`
++
++**Ispravka ranijeg nalaza:** dve `table.CSSTableGenerator` na stranici NISU dva prevoza
++nego dve DUŽINE boravka — 10 noći i 7 noći. Obe nose naslov
++`PAKET ARANŽMAN (apartmanski smeštaj i autobuski prevoz)`, dakle obe su BUS.
++Cena za sopstveni prevoz se ne objavljuje u tabeli; dobija se kroz formu
++(`Tip prevoza: Agencijski prevoz (autobus) / Sopstveni prevoz`).
++
++Oblik tabele:
++
++```
++red 0   <td colspan=N> naslov paketa
++red 1   <td rowspan=3>Struktura</td> <td rowspan=3>Broj pomoćnih ležaja</td>
++        <td rowspan=3>Broj plativih osoba</td> <td colspan=M>PERIOD BORAVKA / BROJ NOĆENJA</td>
++red 2   broj noćenja po periodu
++red 3   datumi, oblik "20.05. 30.05." — dva datuma, BEZ crtice između
++red 4+  struktura, pomoćni ležaji, plative osobe, pa cena po periodu
++```
++
++**`Broj plativih osoba` je najvredniji podatak na celom sajtu.** Za `1/3+1 STD` piše `4`,
++što znači da se cena množi sa 4. Kapacitet se ne mora izvoditi iz oznake sobe —
++agencija ga je već objavila.
++
++Ostalo: `-` u koloni pomoćnih ležaja znači nula; `*` iza cene je uslovan period
++(fusnota ispod tabele); `1/2 STD RENOV*` — tu je zvezdica deo imena strukture, ne cene.
+diff --git a/docs/recon/soleazur.md b/docs/recon/soleazur.md
+index 928d6a2..d3ec1a0 100644
+--- a/docs/recon/soleazur.md
++++ b/docs/recon/soleazur.md
+@@ -84,3 +84,27 @@ Robots.txt potpuno otvoren. display_prices.php vraca strukturisanu tabelu (objek
+ - WebFetch robots.txt
+ - WebFetch /last-minute-grcka
+ - WebFetch /lm/display_prices.php
++
++
++---
++
++## Dopuna 16.08.2026. — fixture i adapter
++
++Fixture: `apps/scrapers/tests/fixtures/soleazur/display_prices.html`, snimljen iz DOM-a.
++Adapter: `apps/scrapers/src/travelscrape/adapters/soleazur.py`, 19 testova nad fixture-om.
++
++Strukturni detalji koje naivni parser promaši:
++
++- **`rowspan` na imenu objekta.** Redovi posle prvog imaju jednu ćeliju MANJE.
++  Čitanje `cells[0]` kao objekta na tim redovima pročita sobu, a kao sobu — cenu.
++- **Ime objekta je u `<h6><a>` unutar `td[rowspan]`**, nije goli tekst ćelije.
++- **Broj prevoza po koloni nije konstantan.** Halkidiki: `Sopstveni prevoz/Bus prevoz`
++  (dve cene, razdvojene sa `/`). Kefalonija: kolone samo `Avio prevoz` (jedna cena, bez `/`).
++- **Različito trajanje po koloni** u istoj tabeli: `11 dana/10 noci` i `12 dana/11 noci`.
++- **`619€ (585€)`** — puna cena niža od akcijske. Greška u podacima na sajtu, javlja se.
++  Ne pretpostavljati `original > amount`.
++- **`h2` je destinacija, `h6` je hotel.** `css("h2, table")` u selectolax NE vraća redosled
++  dokumenta nego prvo sve `h2` pa sve `table`; mora `root.traverse()`.
++
++Jedna agencijska ponuda se deli na dve naše (`__own`, `__bus`) jer `departure` ima
++UNIQUE `(offer_id, start_date, end_date, departure_place_raw)` bez `transport_type`.
+-- 
+2.43.0
+
