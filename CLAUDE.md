@@ -582,11 +582,29 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
      `apps/api/tests/__init__.py` su oba pravila paket po imenu `tests`, kolizija pri `pytest`
      kolekciji iz korena (`ModuleNotFoundError` na drugom paketu). Oba `__init__.py` obrisana —
      `pytest.ini` već koristi rootless "prepend" import mode, nisu ni trebala.
-   - **3c** — proširenje pokrivenosti (5 novih testova: `PER_PERSON_PER_NIGHT`, `PriceSlot.INFANT`,
-     više dece različitog uzrasta, `capacity_total` koji se ne slaže sa
-     `capacity_adults + capacity_extra`, memoizacija sa zadatim `rooms`), zaseban commit. **Čeka
-     korisnikov pregled 3b pre početka.**
-   - **3d** — merenje najgoreg slučaja (8 odraslih, 4 dece, 6 soba), broj u §9. Posle 3c.
+   - **3c** ✓ 19.08.2026 — proširenje pokrivenosti, 5 novih testova. **Svih pet provereno
+     protiv stvarnog solvera pre pisanja tvrdnje** (ne pretpostavljeno), nijedno nije otkrilo
+     pogrešno ponašanje:
+     - `PER_PERSON_PER_NIGHT` — 50 EUR/osobi/noć × 2 odrasla × 5 noćenja = 500.00.
+     - `PriceSlot.INFANT` — **nema svoje polje u `_RoomType`, isto kao Kotlin `RoomType`.**
+       Cena objavljena za `INFANT` slot se tiho ne koristi nigde (potvrđeno i u Kotlin
+       izvoru — nijedno polje `RoomType`-a je ne čita). Dete bez `CHILD` bracket-a pada na
+       `extra_bed_price` kao rezervu, ne na (mnogo nižu) `INFANT` cenu.
+     - Više dece različitog uzrasta — dete sa najvećim popustom (bracket 2-6, 100) ide na
+       extra ležaj, skuplje dete (bracket 7-11, 150) pada u osnovni ležaj po ceni odrasle
+       osobe (pravilo 3). Potvrđuje da pravilo 4 (ranking) stvarno menja ishod, ne samo kad
+       svi stanu.
+     - `capacity_total` nesklad — **`_RoomType.capacity_total` je UVEK računat kao
+       `max(capacity_adults preko svih redova) + max(capacity_extra preko svih redova)`,
+       nezavisno po koloni** (`PriceOption` nema `capacity_total` polje uopšte, ni u Kotlinu
+       ni u Pythonu, iako `price_option.capacity_total` postoji kao kolona u bazi —
+       vrednost iz baze se nikad ne čita). Dva reda različitog kapaciteta za isti `room_code`
+       mogu sintetizovati veći kapacitet nego što ijedan red pojedinačno tvrdi (ovde: 2+2=4,
+       nijedan red ne kaže 4).
+     - Memoizacija sa zadatim `rooms` — 4 odrasla u tačno 3 sobe, jedina moguća podela
+       2+1+1, 698+499+499=1696.00. Ista stanja dostižu se iz više grana (koji god
+       `room_type` prvi popuni dvoosobnu sobu), memo daje isti ispravan rezultat.
+   - **3d** — merenje najgoreg slučaja (8 odraslih, 4 dece, 6 soba), broj u §9.
    - Detalji zamki: `instrukcije/porukazaclaudecode8.md`. Poznati, namerno neispravljen bug u
      rangiranju dece (zamka 4) — popravka ide u ZASEBAN commit POSLE 3c, ne sad.
    - **Nezavisna provera (poruka 9, 19.08.2026):** korisnik je pročitao `occupancy.py`,
@@ -1036,3 +1054,4 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | 19.08.2026 | Pravilo 20: `ORDER BY`/imena kolona nikad iz korisničkog unosa direktno — isključivo preslikavanjem u član `SortBy`/`SortDirection` enuma koji nosi `sql_expression` |
 | 19.08.2026 | Nalaz 4 rešen: `Party.child_ages` je `Sequence[int]` na ulazu (prima listu radi udobnosti), `__post_init__` je zamrzava u `tuple` (`object.__setattr__`, jer je dataclass `frozen=True`) — pozivalac ne može da izmeni sastav grupe posle konstrukcije, i `Party` je stvarno heširljiv (`frozen=True` bez ovoga generiše `__hash__` koji puca na `list` polju). `RoomAssignment.child_ages` i `_RoomType.child_brackets` isto prešli na `tuple`. Novi test: `Party`/`RoomAssignment` u `set()` |
 | 19.08.2026 | Nalaz 3 proveren: dva testa direktno na `Solution.per_person()` (bez solvera) sa deljenjem koje se ne završava — `100.00/3` (ručno HALF_UP → `33.33`) i `100.00/7` (ručno HALF_UP → `14.29`). **Oba prolaze sa postojećom implementacijom** — dvostepeno zaokruživanje (deljenje na 28 cifara pa `quantize`, nasuprot Kotlinovom jednom koraku) se ne materijalizuje za ove vrednosti. Kod NIJE menjan (uputstvo: ne diraj kad test prođe), nalaz upisan u §9 |
+| **19.08.2026** | **ADR 0001 korak 3c gotov — 5 testova proširene pokrivenosti, 25 ukupno u `test_occupancy.py`.** Svih pet provereno protiv stvarnog solvera PRE pisanja tvrdnje (skripta van test fajla), nijedno nije otkrilo pogrešno ponašanje — dve moje ručne pretpostavke o očekivanim brojevima bile pogrešne pre provere (prevideo da `capacity_extra` može primiti INFANT-dete u ISTU sobu sa oba roditelja, i da solver može booking-ovati isti `room_type` više puta za rešenje "5 odraslih"), ispravljeno pre pisanja testa, ne posle. Nalaz: `capacity_total` se UVEK računa kao `max(capacity_adults)+max(capacity_extra)` nezavisno po koloni — `PriceOption` nema `capacity_total` polje ni u Kotlinu ni u Pythonu, iako kolona postoji u bazi (`price_option.capacity_total`) i vrednost iz baze se nikad ne čita |
