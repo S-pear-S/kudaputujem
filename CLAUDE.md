@@ -560,16 +560,35 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
 
 1. ~~**Korak 1: `packages/travelcore`**~~ ✓ 1a+1b+1c gotovi 17.08.2026 (commit-i `8a70043`,
    `1c4a1b5`, `08584f2` za import-linter). Vidi §6 tabelu za detalje.
-2. **Korak 2: `alembic` skelet.** `V1__init.sql`/`V2__seed_geo.sql` prepisani u alembic
-   migracije bez izmene sadržaja. Prihvatni kriterijum: `pg_dump --schema-only` nad bazom
-   migriranom alembicom identičan onoj migriranoj Flywayem. **Čeka se korisnikov pregled 1c
-   pre početka — ne kreći sam.**
-3. **Korak 3: `OccupancySolver` u Python.** `OccupancySolverTest.kt` → `tests/test_occupancy.py`
-   prvo (svi testovi crveni sa nepromenjenim očekivanim brojevima), pa tek onda
-   `pricing/occupancy.py` dok ne pozelene. Brojevi iz Kotlin testa su verifikovana specifikacija.
+2. ~~**Korak 2: `alembic` skelet.**~~ ✓ Gotov u celini 19.08.2026. `V1__init.sql`/`V2__seed_geo.sql`
+   u `apps/api/migrations/sql/`, revizije `0001`/`0002`, `postgres_data` volumen od 15.08 obrisan
+   i baza nastala isključivo kroz `alembic upgrade head`. Vidi §6 tabelu, commit-i
+   `daf7926`…`18d70cf`.
+3. **Korak 3: `OccupancySolver` u Python.** ⏳ **U TOKU 19.08.2026, zeleno svetlo dobijeno.**
+   `OccupancySolverTest.kt` → `apps/api/tests/test_occupancy.py` prvo (svih 17 testova crveno,
+   nepromenjeni očekivani brojevi — specifikacija, ne implementacioni detalj), commit dok su
+   crveni. Pa `apps/api/src/travelapi/pricing/occupancy.py` dok ne pozelene, **zaseban commit**.
+   Sedam poznatih zamki iz Kotlina (sentinela `UNSOLVABLE`, `BigDecimal`/`Decimal` poređenje,
+   dvostruko zaokruživanje, bug u rangiranju dece — prenosi se doslovno, prijaviti zasebno, ne
+   popravljati u ovom koraku, itd.) — detalji u `instrukcije/porukazaclaudecode8.md`, prenose se
+   ovde kad se koraci završe. **Stani posle 3b (implementacija pozelenela), pre proširenja
+   pokrivenosti (3c)** — korisnik hoće da vidi broj mesta sa `BigDecimal ==` i kako su rešena
+   pre nego što se ide dalje.
 4. **Korak 4: Ostatak API-ja**, modul po modul: `errors` → `db` → `geo` → `accommodation` →
    `ingest` → `pricing/price_index` → `search`. Svaki modul nosi svoje testove. `numeric` iz
    Postgresa mora stizati kao `Decimal` (psycopg 3), nikad `float`.
+   - **Format na žici (ADR 0002, docs/decisions/0002-format-na-zici.md):** `/internal/*` prima
+     **snake_case** (isto što skreper šalje danas — `core/ingest.py` se NE dira), `/api/*` vraća
+     **camelCase** (frontend `lib/types.ts` već tako čita).
+   - **Obavezan ugovorni test, deo ovog koraka, ne opciono:** pravi `OfferIn` sa punim sadržajem
+     mora proći kroz pravi `POST /internal/ingest/offers` i stići u bazu nepromenjen. Ne mock,
+     ne poređenje šema — pravi HTTP zahtev, prava baza. Dosad ovaj lanac **nikad nije proveren
+     od kraja do kraja** (vidi ADR 0002 — `start_run` je radio slučajno, ostatak ugovora nije).
+   - **Enumi koji nedostaju u `travelcore.enums`, popisano 18.08.2026, ne raditi pre koraka 4:**
+     `SourceHealth`, `LeadStatus`, `AliasStatus` (kolone u bazi → idu u `travelcore`, kao i
+     ostali enumi). `SortBy`, `SortDirection` su stvar API-ja → idu u `travelapi`, ne u
+     `travelcore`. `BoardType` u Kotlinu ima i `labelSr` i `rank`, u Pythonu trenutno nema —
+     proveriti da li ta dva polja stvarno trebaju pre nego što se dodaju.
 5. **Korak 5: E2E provera.** `soleazur` skreper → `POST /internal/ingest` (Python API sad) →
    baza → `GET /search` vraća tu ponudu. `IngestClient` u skreperu se ne menja.
 6. **Korak 6: Brisanje Kotlina.** Tek posle koraka 5, zaseban commit — `apps/api/src/main/kotlin`,
@@ -816,7 +835,9 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
    Hetzner (~4€/mes), Fly.io, Railway, Neon/Supabase za Postgres.
 3. **Uzrast deteta** — potvrditi konvenciju "dete do 12" = gornja granica 11 godina.
 4. **Prikaz cene** — po osobi ili ukupno za grupu, kao podrazumevano?
-5. **Koliko agencija u prvoj javnoj verziji** — 5, 10 ili 20?
+5. ~~Koliko agencija u prvoj javnoj verziji — 5, 10 ili 20?~~ **Odgovoreno 18.08.2026: svih 22
+   upotrebljiva izvora.** Vidi §13, "Pun obim, bez skraćivanja" — vlasnik projekta je eksplicitno
+   odbio raniji predlog da se prva verzija skrati na 6–8 agencija, jednu zemlju, bez lead forme.
 6. **Kontakt mejl** za `User-Agent` skrepera i za lead formu. (Više ne blokira dopisivanje
    sa agencijama — po odluci od 16.08.2026. agencije se ne kontaktiraju.)
 7. ~~Da li da se krene na ADR 0001 korak C3?~~ **Odgovoreno i urađeno 19.08.2026** (§6, §13).
@@ -871,6 +892,8 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | 18.08.2026 | C1: `pg_dump --schema-only` diff između baze od 15.08 i `ref` (današnji SQL) — prazan van nasumičnog `\restrict`/`\unrestrict` tokena (potvrđeno različit na dva uzastopna dump-a iste nepromenjene baze) i `flyway_schema_history` (Flyway-ova tabela, nije u V1/V2 sadržaju). `pg_get_functiondef(norm_text)` identičan. Baza od 15.08 NIJE zastarela |
 | 18.08.2026 | C2 kriterijum ispravljen: `--schema-only` diff sam po sebi ne dokazuje da su PODACI ubačeni — da revizija `0002` uopšte ne izvrši, diff bi i dalje bio prazan. Dodata provera podataka |
 | 18.08.2026 | C2: `pg_dump --data-only` diff između `ref` i `mig` (alembic) NIJE bio prazan prvim pokušajem — ne zbog redosleda redova (očekivano u instrukciji) nego zbog `created_at`/`updated_at DEFAULT now()`, koje hvataju stvarno vreme svakog od dva odvojena učitavanja i uvek će se razlikovati nezavisno od alata. Rešenje: `md5(string_agg(... order by id))` po tabeli, isključujući te dve kolone — `destination` i `destination_alias` daju identičan heš, ostalih 17 tabela prazno=prazno. Šema I podaci potvrđeno identični |
+| **18.08.2026** | **Pun obim, bez skraćivanja — odluka vlasnika projekta.** Svih 22 upotrebljiva izvora dobijaju adapter. Lead forma ostaje. Admin panel ostaje. Sve tri vrste proizvoda ostaju: paket, samo prevoz, samo smeštaj. Rok nije ograničenje. Kvalitet i širina imaju prednost nad brzinom lansiranja. Nijedna funkcionalnost se ne izbacuje radi ranijeg puštanja. Raniji predlog (skraćivanje na 6–8 agencija, jednu zemlju, bez lead forme) je **odbijen i ne važi** |
+| **18.08.2026** | **ADR 0002: format na žici, ispravka greške iz ADR 0001.** ADR 0001 je tvrdio da format ostaje nepromenjen (camelCase svuda) na osnovu neprovere pretpostavke. Stvarno stanje: `IngestClient.send_batch` šalje `model_dump(mode="json")` (**snake_case**), `IngestDto.kt`/`JacksonConfig.kt` očekuju camelCase bez naming strategije — lanac skreper→API nikad nije prošao od kraja do kraja, radio je samo `start_run` jer tamo ručno piše `{"sourceSlug": ...}`. Odluka: `/internal/*` ostaje **snake_case** (Python priča sa Pythonom, skreper se ne dira), `/api/*` je **camelCase** (frontend `lib/types.ts` već tako čita). Dokument: `docs/decisions/0002-format-na-zici.md`. Obavezan ugovorni test u koraku 4 — pravi `OfferIn` kroz pravi `/internal/ingest/offers`, ne mock (§7) |
 | 19.08.2026 | Dokaz atomičnosti sirovog kursora u `migrations/_raw_sql.py`: privremena namerna greška na kraju revizije 0002, pušteno `alembic upgrade head` nad praznom bazom — posle pada **nula tabela**, uključujući sve iz 0001. Kursor deli alembic-ovu transakciju (`op.get_bind().connection`), ne otvara novu. Izmena vraćena, `git diff` prazan pre commit-a |
 | 19.08.2026 | Prebrojano §8: 18 pravila, neprekidan niz 1–18, bez rupe i duplikata. Pravilo 18 (Optional iz strane biblioteke) je ispravan broj — 17 je već zauzet import-linter pravilom (pomerenim sa "16" u poruci 3 jer je 16 zauzeto tajnama). Korisnikova sumnja "dogovorili smo se za 17" je bila zasnovana na nepotpunoj slici numeracije, ne na stvarnoj grešci |
 | **19.08.2026** | **Jedan `.venv` u korenu umesto po paketu.** `apps/scrapers/.venv` i `apps/api/.venv` obrisani, sve tri paketa (`travelcore`, `travelscrape`, `travelapi`) instalirani u `D:\Kiki\kudaputujem\.venv`. Razlog: korak 5 (E2E) treba isto okruženje za skreper i API; korak 4 dodaje `travelapi` kao treći `.importlinter` `root_package`; VS Code bira jedan interpreter po prozoru. `pytest.ini` u korenu. Commit `18d70cf` |
