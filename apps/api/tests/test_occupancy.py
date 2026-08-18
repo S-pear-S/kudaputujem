@@ -75,13 +75,18 @@ def _total(
     return solver.solve(options if options is not None else _hotel_pricing(), party, nights)
 
 
+def _assert_money(actual: Decimal, expected: str) -> None:
+    """Poredi i vrednost i skalu. Decimal `==` ignoriše skalu, Kotest shouldBe ne."""
+    assert str(actual) == expected, f"ocekivano {expected}, dobijeno {actual}"
+
+
 # ------------------------------------------------------------------------ hotel
 
 
 def test_dvoje_odraslih_ide_u_dvokrevetnu(solver: OccupancySolver) -> None:
     result = _total(solver, Party(adults=2))
     assert result is not None
-    assert result.total == Decimal("698.00")
+    _assert_money(result.total, "698.00")
     assert len(result.rooms) == 1
     assert result.rooms[0].room_code == "1/2"
 
@@ -89,7 +94,7 @@ def test_dvoje_odraslih_ide_u_dvokrevetnu(solver: OccupancySolver) -> None:
 def test_jedna_osoba_placa_doplatu_za_jednokrevetnu(solver: OccupancySolver) -> None:
     result = _total(solver, Party(adults=1))
     assert result is not None
-    assert result.total == Decimal("499.00")  # 349 + 150
+    _assert_money(result.total, "499.00")  # 349 + 150
 
 
 def test_troje_odraslih_ide_u_trokrevetnu_jer_je_jeftinija_od_pomocnog_lezaja(
@@ -97,7 +102,7 @@ def test_troje_odraslih_ide_u_trokrevetnu_jer_je_jeftinija_od_pomocnog_lezaja(
 ) -> None:
     result = _total(solver, Party(adults=3))
     assert result is not None
-    assert result.total == Decimal("987.00")  # 3 x 329, a ne 349+349+299
+    _assert_money(result.total, "987.00")  # 3 x 329, a ne 349+349+299
     assert len(result.rooms) == 1
     assert result.rooms[0].room_code == "1/3"
 
@@ -107,7 +112,7 @@ def test_cetvoro_odraslih_ide_u_cetvorokrevetnu_umesto_u_dve_dvokrevetne(
 ) -> None:
     result = _total(solver, Party(adults=4))
     assert result is not None
-    assert result.total == Decimal("1276.00")  # 4 x 319 < 2 x 698
+    _assert_money(result.total, "1276.00")  # 4 x 319 < 2 x 698
     assert result.room_count == 1
 
 
@@ -116,7 +121,7 @@ def test_dete_od_osam_godina_dobija_decju_cenu_na_pomocnom_lezaju(
 ) -> None:
     result = _total(solver, Party(adults=2, child_ages=[8]))
     assert result is not None
-    assert result.total == Decimal("897.00")  # 349 + 349 + 199
+    _assert_money(result.total, "897.00")  # 349 + 349 + 199
     assert len(result.rooms) == 1
     assert result.rooms[0].room_code == "1/2+1"
 
@@ -124,20 +129,20 @@ def test_dete_od_osam_godina_dobija_decju_cenu_na_pomocnom_lezaju(
 def test_dete_van_uzrasnog_opsega_placa_kao_odrasla_osoba(solver: OccupancySolver) -> None:
     result = _total(solver, Party(adults=2, child_ages=[15]))
     assert result is not None
-    assert result.total == Decimal("987.00")  # 15 godina nije "dete 2-11" -> 1/3
+    _assert_money(result.total, "987.00")  # 15 godina nije "dete 2-11" -> 1/3
 
 
 def test_grupa_se_deli_na_dve_sobe_kad_ne_staje_u_jednu(solver: OccupancySolver) -> None:
     result = _total(solver, Party(adults=4, child_ages=[8]))
     assert result is not None
-    assert result.total == Decimal("1595.00")  # 1/2 (698) + 1/2+1 (897)
+    _assert_money(result.total, "1595.00")  # 1/2 (698) + 1/2+1 (897)
     assert result.room_count == 2
 
 
 def test_eksplicitan_broj_soba_se_postuje_i_kad_je_skuplji(solver: OccupancySolver) -> None:
     result = _total(solver, Party(adults=4, rooms=2))
     assert result is not None
-    assert result.total == Decimal("1396.00")  # 2 x 1/2, iako je 1/4 jeftinije
+    _assert_money(result.total, "1396.00")  # 2 x 1/2, iako je 1/4 jeftinije
     assert result.room_count == 2
 
 
@@ -172,13 +177,13 @@ def test_prevelika_grupa_za_raspolozive_sobe_daje_none(solver: OccupancySolver) 
 def test_apartman_se_placa_ceo_i_po_noci(solver: OccupancySolver) -> None:
     result = _total(solver, Party(adults=4), options=_apartment_pricing())
     assert result is not None
-    assert result.total == Decimal("420.00")  # 60 x 7
+    _assert_money(result.total, "420.00")  # 60 x 7
 
 
 def test_dve_osobe_uzimaju_jeftiniji_studio(solver: OccupancySolver) -> None:
     result = _total(solver, Party(adults=2), options=_apartment_pricing())
     assert result is not None
-    assert result.total == Decimal("315.00")  # 45 x 7
+    _assert_money(result.total, "315.00")  # 45 x 7
     assert len(result.rooms) == 1
     assert result.rooms[0].room_code == "SU2/3"
 
@@ -188,7 +193,7 @@ def test_sest_osoba_u_dva_studija_je_jeftinije_od_apartmana_i_studija(
 ) -> None:
     result = _total(solver, Party(adults=6), options=_apartment_pricing())
     assert result is not None
-    assert result.total == Decimal("630.00")  # 2 x 315 < 420 + 315
+    _assert_money(result.total, "630.00")  # 2 x 315 < 420 + 315
     assert result.room_count == 2
 
 
@@ -199,7 +204,7 @@ def test_cena_po_osobi_se_racuna_na_ukupan_broj_putnika(solver: OccupancySolver)
     party = Party(adults=2, child_ages=[8])
     result = _total(solver, party)
     assert result is not None
-    assert result.per_person(party.size) == Decimal("299.00")  # 897 / 3
+    _assert_money(result.per_person(party.size), "299.00")  # 897 / 3
 
 
 def test_minimum_for_adults_ne_baca_izuzetak_za_nemoguc_broj_osoba(

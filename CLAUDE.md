@@ -730,6 +730,14 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
     test za nju je **karakterizacioni, ne regresioni**: tvrdi „ovako se ponašamo danas", ne
     „ovo je nekad bilo pokvareno". Regresioni test koji ne pada na starom kodu ne dokazuje ništa
     — proveri to eksplicitno pre nego što ga upišeš kao regresiju.
+19. **Poređenje novca u testovima ide preko `str()`, ne preko `==`.** `Decimal` `==` ignoriše
+    broj decimala (`Decimal("698") == Decimal("698.00")` je `True`), pa test sa `==` ne primeti
+    da je zaokruživanje nestalo. (19.08.2026, `test_occupancy.py` — Kotest `shouldBe` nad
+    `BigDecimal` poziva `equals()`, koje JESTE osetljivo na skalu, pa je Kotlin test čuvao skalu
+    koju je Python `==` prevod tiho izgubio; svih 17 testova je prolazilo i sa oba `quantize`
+    poziva obrisana iz `occupancy.py`, dokazano eksperimentom.) Koristi pomoćnu funkciju:
+    `assert str(actual) == expected` (npr. `_assert_money(result.total, "698.00")`), za svaku
+    proveru novčanog iznosa — ukupnu cenu, cenu po osobi, cenu po sobi.
 
 ---
 
