@@ -53,8 +53,6 @@ _UNSOLVABLE = Decimal("999999999")
 
 _CENTS = Decimal("0.01")
 
-_PER_NIGHT_BASES = frozenset({PricingBasis.PER_PERSON_PER_NIGHT, PricingBasis.PER_UNIT_PER_NIGHT})
-
 
 # --------------------------------------------------------------------------- ulaz
 
@@ -264,12 +262,10 @@ def _build_room_types(options: list[PriceOption]) -> list[_RoomType]:
                     (o.amount for o in group if o.slot == PriceSlot.UNIT), default=None
                 ),
                 unit_per_night=any(
-                    o.slot == PriceSlot.UNIT and o.pricing_basis in _PER_NIGHT_BASES
-                    for o in group
+                    o.slot == PriceSlot.UNIT and o.pricing_basis.per_night for o in group
                 ),
                 person_per_night=any(
-                    o.slot != PriceSlot.UNIT and o.pricing_basis in _PER_NIGHT_BASES
-                    for o in group
+                    o.slot != PriceSlot.UNIT and o.pricing_basis.per_night for o in group
                 ),
                 child_brackets=child_brackets,
             )

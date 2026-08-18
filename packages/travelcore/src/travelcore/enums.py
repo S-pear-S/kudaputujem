@@ -49,6 +49,16 @@ class PricingBasis(StrEnum):
     PER_UNIT_PER_STAY = "PER_UNIT_PER_STAY"
     PER_UNIT_PER_NIGHT = "PER_UNIT_PER_NIGHT"
 
+    @property
+    def per_night(self) -> bool:
+        """Prepisano iz Kotlin `PricingBasis(val perNight: Boolean, ...)`."""
+        return self in (PricingBasis.PER_PERSON_PER_NIGHT, PricingBasis.PER_UNIT_PER_NIGHT)
+
+    @property
+    def per_unit(self) -> bool:
+        """Prepisano iz Kotlin `PricingBasis(..., val perUnit: Boolean)`."""
+        return self in (PricingBasis.PER_UNIT_PER_STAY, PricingBasis.PER_UNIT_PER_NIGHT)
+
 
 class PriceSlot(StrEnum):
     ADULT = "ADULT"
