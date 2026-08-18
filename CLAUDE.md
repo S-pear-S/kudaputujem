@@ -589,6 +589,11 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
    - **3d** — merenje najgoreg slučaja (8 odraslih, 4 dece, 6 soba), broj u §9. Posle 3c.
    - Detalji zamki: `instrukcije/porukazaclaudecode8.md`. Poznati, namerno neispravljen bug u
      rangiranju dece (zamka 4) — popravka ide u ZASEBAN commit POSLE 3c, ne sad.
+   - **Nezavisna provera (poruka 9, 19.08.2026):** korisnik je pročitao `occupancy.py`,
+     `test_occupancy.py` i `OccupancySolver.kt` red po red — **port je veran**, nalaz o
+     `BigDecimal ==` potvrđen tačan. Ipak četiri nalaza, prva dva urađena danas (vidi §8
+     pravilo 19, §9), preostala dva (`tuple` umesto `list` u dataclass-ovima, testovi za
+     deljenje koje se ne završava) i `--import-mode=importlib` čekaju sledeći nastavak.
 4. **Korak 4: Ostatak API-ja**, modul po modul: `errors` → `db` → `geo` → `accommodation` →
    `ingest` → `pricing/price_index` → `search`. Svaki modul nosi svoje testove. `numeric` iz
    Postgresa mora stizati kao `Decimal` (psycopg 3), nikad `float`.
@@ -599,11 +604,36 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
      mora proći kroz pravi `POST /internal/ingest/offers` i stići u bazu nepromenjen. Ne mock,
      ne poređenje šema — pravi HTTP zahtev, prava baza. Dosad ovaj lanac **nikad nije proveren
      od kraja do kraja** (vidi ADR 0002 — `start_run` je radio slučajno, ostatak ugovora nije).
-   - **Enumi koji nedostaju u `travelcore.enums`, popisano 18.08.2026, ne raditi pre koraka 4:**
-     `SourceHealth`, `LeadStatus`, `AliasStatus` (kolone u bazi → idu u `travelcore`, kao i
-     ostali enumi). `SortBy`, `SortDirection` su stvar API-ja → idu u `travelapi`, ne u
-     `travelcore`. `BoardType` u Kotlinu ima i `labelSr` i `rank`, u Pythonu trenutno nema —
-     proveriti da li ta dva polja stvarno trebaju pre nego što se dodaju.
+   - **Enumi — puna lista razlika Kotlin/Python, popisano 18–19.08.2026 (poruke 8 i 9, nalaz 2
+     iz poruke 9), ne raditi pre koraka 4.** Kompletno prošao ceo `Enums.kt` red po red:
+     - **`PricingBasis`** — ✓ rešeno 19.08.2026, `per_night`/`per_unit` su sad `@property` na
+       `travelcore.enums.PricingBasis`, test `packages/travelcore/tests/test_enums.py`.
+     - **`BoardType`** — Kotlin nosi `labelSr: String` i `rank: Int` po članu, Python nema
+       nijedno. Proveriti da li stvarno trebaju pre dodavanja (labelSr možda samo frontend
+       lokalizacija, rank možda samo sortiranje — oba mogu biti `travelapi` briga, ne
+       `travelcore` domenski podatak).
+     - **`SortBy`** — u Kotlinu nosi `sqlExpression: String` po članu (whitelist za `ORDER BY`,
+       npr. `PRICE("total_rsd")`). U Pythonu **ne postoji uopšte još**. Kad se napravi u koraku 4
+       (`travelapi`, ne `travelcore` — API-only koncept), mora odmah nositi `sql_expression`,
+       ne biti goli enum koji se posle mora doterivati.
+     - **`SortDirection`** — u Pythonu ne postoji još, ide u `travelapi`. Bez pridruženih
+       podataka u Kotlinu, samo `ASC`/`DESC`.
+     - **`DestinationKind`** — **NOVI nalaz, nije bio ranije popisan.** `destination.kind` kolona
+       u `V1__init.sql` ima komentar `-- COUNTRY/REGION/CITY/RESORT/ISLAND` ali NEMA CHECK
+       ograničenje, i taj enum **ne postoji nigde u `travelcore.enums`** — ni sa podacima ni bez
+       njih, prosto nedostaje. Kolona u bazi → ide u `travelcore`, kao `SourceHealth` i ostali.
+     - **`SourceHealth`, `LeadStatus`, `AliasStatus`** — i dalje nedostaju u `travelcore`
+       (popisano već u poruci 8), kolone u bazi → `travelcore`.
+     - **Sistemski nedostatak, ne po-enum: `fromDb(value: String?)`.** Companion metod na 7
+       Kotlin enuma (`ProductKind`, `TransportType`, `BoardType`, `PricingBasis`, `PriceSlot`,
+       `SurchargeCode`, `AccommodationKind`) — nepoznata/`null` vrednost iz baze vraća fallback
+       umesto da baci izuzetak, da jedan neočekivan red ne obori celu pretragu. Python strana
+       nema ekvivalent nigde. Ovo pripada `db`/`search` modulu u koraku 4 (generički helper za
+       čitanje enuma iz reda), ne pojedinačnom enumu — ne implementirati po enumu ad-hoc.
+       `SortBy`/`SortDirection` imaju analogan `fromParam` (case-insensitive, za URL parametre),
+       isto pripada `travelapi` strani koraka 4.
+     - `SurchargeKind`, `SurchargeUnit`, `Payable`, `CrawlStatus` — bez pridruženih podataka u
+       Kotlinu, Python već ima sve članove, nema šta da nedostaje.
 5. **Korak 5: E2E provera.** `soleazur` skreper → `POST /internal/ingest` (Python API sad) →
    baza → `GET /search` vraća tu ponudu. `IngestClient` u skreperu se ne menja.
 6. **Korak 6: Brisanje Kotlina.** Tek posle koraka 5, zaseban commit — `apps/api/src/main/kotlin`,
@@ -760,6 +790,7 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
 | `docs/recon/*.md` imaju "Pouzdanost: low/medium" na skoro svakom sajtu iz prve (skuplje) recon runde | niska | Nalazi za te sajtove su i dalje najbolja dostupna informacija dok se ne potvrde lokalno u browseru (kao što je urađeno za soleazur i oktopod); ne tretiraj "low" kao "netačno", tretiraj kao "neverifikovano" |
 | `psycopg` 3 puca na bukvalnom `%` u SQL-u kad se izvršava kroz SQLAlchemy | **visoka za korak 4** | Otkriveno u alembic reviziji 0001 — `V1__init.sql` ima komentar `"-20%"`. `op.execute()`/`Connection.exec_driver_sql()` idu kroz SQLAlchemy-ev `cursor.execute(statement, parameters)` čak i sa praznim `parameters`, a psycopg 3 tada PARSIRA string tražeći `%s`/`%b`/`%t` placeholdere i puca na svakom drugom `%`. Rešenje ovde: sirovi DBAPI kursor (`connection.connection.cursor().execute(sql)`, tačno JEDAN argument) — `migrations/_raw_sql.py`. **Isto pravilo važi za FastAPI u koraku 4**: svaki raw SQL sa mogućim bukvalnim `%` (LIKE obrasci, komentari, JSON operatori `?`/`@>`) mora ili kroz vezane parametre (`cursor.execute(sql, params)`, gde se `%s` STVARNO koristi kao placeholder), ili kroz sirovi kursor bez drugog argumenta — nikad `op.execute(plain_string)` stila bez razmišljanja o ovome. |
 | `gen_geo_seed.py` ima 6 pred-postojećih ruff nalaza | niska | Prvi put linted 18.08.2026 (novi `apps/api/pyproject.toml` prvi put uključuje `scripts/`). `E501`×2, `UP020`×2 (`io.open` → `open`), `SIM115`×2 (context manager). Nisu uvedeni ADR 0001 korakom 2 — samo `OUT` putanja je menjana u tom fajlu (§6). Ne diraj ih uz migracioni posao, zaseban commit ako se radi. |
+| `packages/travelcore/src` ima 15 pred-postojećih ruff nalaza | niska | Prvi put `ruff check` pokrenut DIREKTNO nad `packages/travelcore/src` 19.08.2026 (ranije se `travelcore` samo uvozio iz `apps/scrapers`/`apps/api`, nikad lint-ovao kao sopstveni cilj). `UP036` (zastareo `sys.version_info >= (3, 11)` blok u `enums.py` — projekat je odavno na 3.12, StrEnum kompatibilni shim više ne treba), `UP042` (isti blok, `class StrEnum(str, Enum)` → koristiti `enum.StrEnum` direktno), `RUF001`×11 (ćirilica i specijalni razmaci u `normalize/money.py`/`normalize/text.py` — namerni, to je transliteraciona tabela, ne greška), `E501`×1 u `normalize/rooms.py`. Nijedan nije uveden mojom izmenom (dodao sam samo `per_night`/`per_unit` properties u `enums.py`, koje su čiste). Ne diraj uz enum posao, zaseban commit ako se radi — `UP036`/`UP042` verovatno vredi počistiti (shim je mrtav kod na 3.12), `RUF001` verovatno treba `# noqa` po liniji jer je namerno. |
 | ~~`test_sql_parity.py` nikad nije pokrenut na ovoj mašini~~ | ✓ rešeno 17.08.2026 | Tražio `psql` na PATH-u, kojeg nema jer je Postgres u Dockeru — test se preskakao **zauvek**, tiho, bez upozorenja. Commit `791d4aa`: prepisan na `psycopg`. Sad prvi put stvarno pokrenut: **153/153 prolazi**, Python i SQL normalizacija se slažu. Ne pretpostavljaj da je nešto provereno samo zato što test postoji — proveri da li se stvarno IZVRŠAVA. |
 | ~~Postojeći `postgres_data` Docker volume imao lozinku iz 15.08, ne iz `.env.example`~~ | ✓ rešeno 19.08.2026 | Volume od 15.08 je obrisan u ADR 0001 koraku C3 (§6), posle rezervne kopije i provere da nema podataka van geo seed-a. Nova baza je nastala isključivo kroz `alembic upgrade head`, sa nasumičnom lozinkom u `.env`. I dalje opšte pravilo za budućnost: pre nego što izmisliš lozinku za `.env`, proveri `docker volume ls` — ako `kudaputujem_postgres_data` već postoji, lozinka mora da odgovara onoj sa kojom je volume prvi put pokrenut, inače `FATAL: password authentication failed` sa host mašine (`docker compose exec` i dalje radi jer container-interni `pg_hba.conf` trust-uje loopback unutar kontejnera bez obzira na lozinku — ne daj se zavarati time). |
 | Dva odvojena `.venv` (`apps/scrapers/.venv`, `apps/api/.venv`) | ✓ rešeno 19.08.2026 | Spojeni u jedan `.venv` u korenu (§6, §10) — korak 5 (E2E) treba isto okruženje za skreper i API, korak 4 dodaje `travelapi` kao treći `.importlinter` `root_package`. |
@@ -929,3 +960,6 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | 19.08.2026 | ADR 0001 korak 3a: `OccupancySolverTest.kt` → `apps/api/tests/test_occupancy.py`, svih 17 testova, komitovano dok crveno (`ModuleNotFoundError`) kao dokaz da je specifikacija zapisana pre implementacije. Commit `ad8bc2d` |
 | **19.08.2026** | **ADR 0001 korak 3b: `occupancy.py`, svih 17 testova prošlo iz prve.** Commit `2cc2926`. Nula mesta sa `BigDecimal ==` u `OccupancySolver.kt` (sva poređenja `<`/`<=`/`>`/`>=`) — Python `Decimal` se za te operatore ponaša identično Kotlinovom `compareTo`, nikakav obilazak nije trebao. Sedam zamki prenete doslovno, uklj. namerno neispravljen bug u rangiranju dece za pomoćni ležaj (§9) — popravka čeka poseban commit posle 3c |
 | 19.08.2026 | Usput otkriveno i rešeno: `apps/scrapers/tests/__init__.py` i `apps/api/tests/__init__.py` su oba pravila paket `tests`, kolizija pri `pytest` kolekciji iz korena. Oba obrisana — nisu ni trebala uz `pytest.ini` rootless import mode |
+| **19.08.2026** | **Nezavisna provera porta (poruka 9): korisnik je pročitao `occupancy.py`/`test_occupancy.py`/`OccupancySolver.kt` red po red, ne oslanjajući se na izveštaj. Port je veran, nalaz o `BigDecimal ==` potvrđen tačan.** Ipak četiri nalaza: (1) `test_occupancy.py` je koristio `==` za novac — `Decimal("698")==Decimal("698.00")` je `True`, Kotest `shouldBe` NIJE ekvivalentan jer poziva `equals()` koje JESTE osetljivo na skalu; port je tiho izgubio proveru koju je Kotlin čuvao. (2) `PricingBasis.perNight`/`perUnit` (Kotlin enum-sa-podacima) izgubljeni u prevodu, `_PER_NIGHT_BASES` u solveru je bio simptom. (3) `per_person()` zaokružuje dva puta (deljenje na 28 cifara pa `quantize`) nasuprot Kotlinovom jednom (`divide(..., 2, HALF_UP)` odjednom) — razlika praktično nemoguća ali nedokazana, nijedan test je ne bi uhvatio. (4) `list[int]` u `frozen=True` dataclass-u — `TypeError` na heširanju, i pozivalac može mutirati vraćen `Solution` |
+| 19.08.2026 | Nalaz 1 rešen: `_assert_money(actual, expected)` — poredi `str()`, ne `==`. Svih 12 mesta gde se poredi novac prebačeno. Dokazano eksperimentom: sa `_assert_money` i uklonjenim `quantize()` pozivima, 12/12 relevantnih testova PADA (pre popravke, svih 17 je prolazilo i bez `quantize`). CLAUDE.md pravilo 19. Commit `0e474a2` |
+| 19.08.2026 | Nalaz 2 rešen za `PricingBasis`: `per_night`/`per_unit` kao `@property` na `travelcore.enums.PricingBasis`, `_PER_NIGHT_BASES` uklonjen iz `occupancy.py` u korist direktnog `.pricing_basis.per_night`. Test `packages/travelcore/tests/test_enums.py`, prvi test fajl u `travelcore` — dodat u root `pytest.ini` testpaths. Puna lista ostalih enum razlika (uklj. NOVI nalaz: `DestinationKind` ne postoji uopšte u `travelcore`, i sistemski nedostatak `fromDb`/`fromParam` fallback-metoda na 9 enuma) upisana u §7 korak 4, ne rađena danas |
