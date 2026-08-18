@@ -11,8 +11,9 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-from travelapi.pricing.occupancy import OccupancySolver, Party, PriceOption
 from travelcore.enums import PriceSlot, PricingBasis
+
+from travelapi.pricing.occupancy import OccupancySolver, Party, PriceOption, Solution
 
 
 def _option(
@@ -70,7 +71,7 @@ def _total(
     party: Party,
     nights: int = 7,
     options: list[PriceOption] | None = None,
-):
+) -> Solution | None:
     return solver.solve(options if options is not None else _hotel_pricing(), party, nights)
 
 

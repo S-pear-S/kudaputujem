@@ -564,16 +564,31 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
    u `apps/api/migrations/sql/`, revizije `0001`/`0002`, `postgres_data` volumen od 15.08 obrisan
    i baza nastala isključivo kroz `alembic upgrade head`. Vidi §6 tabelu, commit-i
    `daf7926`…`18d70cf`.
-3. **Korak 3: `OccupancySolver` u Python.** ⏳ **U TOKU 19.08.2026, zeleno svetlo dobijeno.**
-   `OccupancySolverTest.kt` → `apps/api/tests/test_occupancy.py` prvo (svih 17 testova crveno,
-   nepromenjeni očekivani brojevi — specifikacija, ne implementacioni detalj), commit dok su
-   crveni. Pa `apps/api/src/travelapi/pricing/occupancy.py` dok ne pozelene, **zaseban commit**.
-   Sedam poznatih zamki iz Kotlina (sentinela `UNSOLVABLE`, `BigDecimal`/`Decimal` poređenje,
-   dvostruko zaokruživanje, bug u rangiranju dece — prenosi se doslovno, prijaviti zasebno, ne
-   popravljati u ovom koraku, itd.) — detalji u `instrukcije/porukazaclaudecode8.md`, prenose se
-   ovde kad se koraci završe. **Stani posle 3b (implementacija pozelenela), pre proširenja
-   pokrivenosti (3c)** — korisnik hoće da vidi broj mesta sa `BigDecimal ==` i kako su rešena
-   pre nego što se ide dalje.
+3. **Korak 3: `OccupancySolver` u Python.**
+   - **3a** ✓ commit `ad8bc2d` — `OccupancySolverTest.kt` → `apps/api/tests/test_occupancy.py`,
+     svih 17 testova, nepromenjeni očekivani brojevi. Komitovano dok crveno
+     (`ModuleNotFoundError`, implementacija još ne postoji) — dokaz da je specifikacija zapisana
+     pre implementacije.
+   - **3b** ✓ commit `2cc2926` — `apps/api/src/travelapi/pricing/occupancy.py`. **Svih 17
+     testova prošlo iz prve.** `ruff`/`mypy --strict` čisti (mypy zahteva
+     `packages/travelcore/src/travelcore` u istom pozivu, isti obrazac kao za `apps/scrapers`).
+     Sedam zamki iz Kotlina prenete doslovno (ne popravljene) — vidi §9 za pun spisak i
+     obrazloženje svake. **Nalaz o `BigDecimal ==`: NULA mesta.** Sva poređenja u
+     `OccupancySolver.kt` idu preko `<`/`<=`/`>`/`>=` (compareTo u Kotlinu), nijedno preko `==`.
+     Python `Decimal`-ova prirodna `==` se za te operatore ponaša identično Kotlinovom
+     `compareTo`-u (za razliku od `BigDecimal.equals()`, koji jeste osetljiv na skalu) — nikakav
+     `quantize`/tuple obilazak nije bio potreban nigde u `occupancy.py`.
+     Usput otkriven i rešen nepovezan problem: `apps/scrapers/tests/__init__.py` i
+     `apps/api/tests/__init__.py` su oba pravila paket po imenu `tests`, kolizija pri `pytest`
+     kolekciji iz korena (`ModuleNotFoundError` na drugom paketu). Oba `__init__.py` obrisana —
+     `pytest.ini` već koristi rootless "prepend" import mode, nisu ni trebala.
+   - **3c** — proširenje pokrivenosti (5 novih testova: `PER_PERSON_PER_NIGHT`, `PriceSlot.INFANT`,
+     više dece različitog uzrasta, `capacity_total` koji se ne slaže sa
+     `capacity_adults + capacity_extra`, memoizacija sa zadatim `rooms`), zaseban commit. **Čeka
+     korisnikov pregled 3b pre početka.**
+   - **3d** — merenje najgoreg slučaja (8 odraslih, 4 dece, 6 soba), broj u §9. Posle 3c.
+   - Detalji zamki: `instrukcije/porukazaclaudecode8.md`. Poznati, namerno neispravljen bug u
+     rangiranju dece (zamka 4) — popravka ide u ZASEBAN commit POSLE 3c, ne sad.
 4. **Korak 4: Ostatak API-ja**, modul po modul: `errors` → `db` → `geo` → `accommodation` →
    `ingest` → `pricing/price_index` → `search`. Svaki modul nosi svoje testove. `numeric` iz
    Postgresa mora stizati kao `Decimal` (psycopg 3), nikad `float`.
@@ -740,6 +755,9 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
 | ~~`test_sql_parity.py` nikad nije pokrenut na ovoj mašini~~ | ✓ rešeno 17.08.2026 | Tražio `psql` na PATH-u, kojeg nema jer je Postgres u Dockeru — test se preskakao **zauvek**, tiho, bez upozorenja. Commit `791d4aa`: prepisan na `psycopg`. Sad prvi put stvarno pokrenut: **153/153 prolazi**, Python i SQL normalizacija se slažu. Ne pretpostavljaj da je nešto provereno samo zato što test postoji — proveri da li se stvarno IZVRŠAVA. |
 | ~~Postojeći `postgres_data` Docker volume imao lozinku iz 15.08, ne iz `.env.example`~~ | ✓ rešeno 19.08.2026 | Volume od 15.08 je obrisan u ADR 0001 koraku C3 (§6), posle rezervne kopije i provere da nema podataka van geo seed-a. Nova baza je nastala isključivo kroz `alembic upgrade head`, sa nasumičnom lozinkom u `.env`. I dalje opšte pravilo za budućnost: pre nego što izmisliš lozinku za `.env`, proveri `docker volume ls` — ako `kudaputujem_postgres_data` već postoji, lozinka mora da odgovara onoj sa kojom je volume prvi put pokrenut, inače `FATAL: password authentication failed` sa host mašine (`docker compose exec` i dalje radi jer container-interni `pg_hba.conf` trust-uje loopback unutar kontejnera bez obzira na lozinku — ne daj se zavarati time). |
 | Dva odvojena `.venv` (`apps/scrapers/.venv`, `apps/api/.venv`) | ✓ rešeno 19.08.2026 | Spojeni u jedan `.venv` u korenu (§6, §10) — korak 5 (E2E) treba isto okruženje za skreper i API, korak 4 dodaje `travelapi` kao treći `.importlinter` `root_package`. |
+| ~~Dva `tests/__init__.py` (scrapers, api) kolizija imena paketa~~ | ✓ rešeno 19.08.2026 | Oba se zvala paket `tests`, `pytest` iz korena je uzeo prvi u sys.modules i pukao na drugom (`ModuleNotFoundError`) — otkriveno pri dodavanju `apps/api/tests/test_occupancy.py`. Oba `__init__.py` obrisana (commit `2cc2926`), `pytest.ini` već koristi rootless "prepend" import mode pa nisu ni bila potrebna. |
+| **Poznat, NAMERNO neispravljen bug u `OccupancySolver`: rangiranje dece za pomoćni ležaj ne prati stvarnu naplatu** | srednja, dokumentovan, **ne popravljati bez razgovora** | Preneto doslovno iz `OccupancySolver.kt` u `occupancy.py` (`_room_cost`, komentar uz `_child_key`). Deca se biraju za pomoćni ležaj po `child_price` (ili `adult_price` kao rezervi ako nema dečje cene), ali se naplaćuju po `extra_bed_price`. Kad je `extra_bed_price < adult_price`, pohlepan izbor po `child_price` nije nužno optimalan po stvarnoj naplati — moguće je da bi drugačiji raspored dece dao nižu ukupnu cenu. Nijedan od 17 postojećih testova ovo ne pokriva (svi imaju `extra_bed_price >= adult_price` u fixture-ima). Popravka je planirana za **poseban commit posle koraka 3c** (ADR 0001 korak 3, `porukazaclaudecode8.md`), namerno odvojena od porta jer bi promenila očekivane brojeve. |
+| Sedam zamki iz Kotlina, prenete doslovno u `occupancy.py` — pregled | informativno | (1) `UNSOLVABLE` sentinela `Decimal("999999999")` sa `>=`, ne `None`/`math.inf`. (2) **Nula** mesta sa `BigDecimal ==` u `OccupancySolver.kt` (sva poređenja su `<`/`<=`/`>`/`>=`) — Python `Decimal` prirodno odgovara Kotlinovom `compareTo`, nikakav `quantize`/tuple obilazak nije trebao. (3) Dvostruko zaokruživanje: po sobi odmah (`quantize` u `_best`), ukupno tek na kraju u `solve()` — zbir cena po sobama zato ne mora biti jednak ukupnoj ceni, komentarisano u kodu. (4) Bug u rangiranju dece — vidi red iznad, NIJE popravljen. (5) `Party.__post_init__` baca `ValueError`, `minimum_for_adults` ga hvata (`except ValueError`). (6) `child_price` uzima minimum po svim poklapajućim opsezima, opseg bez granica podrazumevano `0..11`, ne "bez ograničenja". (7) Memo ključ `(adults, counts, rooms_used)` namerno NE sadrži `required_rooms` — ispravno samo dok je `required_rooms` konstantan kroz jedan `solve()` poziv (i jeste, svež `memo` dict po pozivu), komentarisano u kodu da se ta pretpostavka ne naruši slučajno. |
 
 ---
 
@@ -898,3 +916,8 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | 19.08.2026 | Prebrojano §8: 18 pravila, neprekidan niz 1–18, bez rupe i duplikata. Pravilo 18 (Optional iz strane biblioteke) je ispravan broj — 17 je već zauzet import-linter pravilom (pomerenim sa "16" u poruci 3 jer je 16 zauzeto tajnama). Korisnikova sumnja "dogovorili smo se za 17" je bila zasnovana na nepotpunoj slici numeracije, ne na stvarnoj grešci |
 | **19.08.2026** | **Jedan `.venv` u korenu umesto po paketu.** `apps/scrapers/.venv` i `apps/api/.venv` obrisani, sve tri paketa (`travelcore`, `travelscrape`, `travelapi`) instalirani u `D:\Kiki\kudaputujem\.venv`. Razlog: korak 5 (E2E) treba isto okruženje za skreper i API; korak 4 dodaje `travelapi` kao treći `.importlinter` `root_package`; VS Code bira jedan interpreter po prozoru. `pytest.ini` u korenu. Commit `18d70cf` |
 | **19.08.2026** | **ADR 0001 korak 2 GOTOV — `postgres_data` volumen od 15.08 obrisan, baza nastala isključivo kroz `alembic upgrade head`.** Pre brisanja: korisnik tražio rezervnu kopiju i proveru sadržaja — `docker volume rm` je i sam sistem prvo blokirao kao destruktivnu radnju (auto-mode klasifikator), korisnik eksplicitno potvrdio nastavak preko `AskUserQuestion`. Backup 129KB/2727 linija (van repoa, `/tmp`), potvrđeno preko `count(*)` po tabeli da nema ničeg van geo seed-a (`destination`=323, `destination_alias`=541, ostalih 17 tabela=0). Nova baza, nasumična lozinka u `.env`. **164 testa prolaze, 0 preskočeno** (153 iz poruke 4 + `test_fetch.py` + prošireni karakterizacioni testovi iz poruka 5/6) |
+| 18.08.2026 | Odluka vlasnika: **pun obim, bez skraćivanja.** Svih 22 izvora, lead forma, admin panel, sve tri vrste proizvoda ostaju; rok nije ograničenje. Raniji predlog (6–8 agencija, jedna zemlja, bez lead forme) odbijen i ne važi. §12 pitanje 5 zatvoreno |
+| 18.08.2026 | ADR 0002: format na žici. Ispravka pretpostavke iz ADR 0001 (da format ostaje nepromenjen) — `IngestClient` šalje snake_case, Kotlin `IngestDto`/`JacksonConfig` očekuju camelCase bez naming strategije, lanac skreper→API nikad nije prošao end-to-end (samo `start_run` je radio, slučajno). Odluka: `/internal/*` snake_case, `/api/*` camelCase. `docs/decisions/0002-format-na-zici.md`. Ugovorni test kroz pravi zahtev postaje obavezan deo koraka 4 |
+| 19.08.2026 | ADR 0001 korak 3a: `OccupancySolverTest.kt` → `apps/api/tests/test_occupancy.py`, svih 17 testova, komitovano dok crveno (`ModuleNotFoundError`) kao dokaz da je specifikacija zapisana pre implementacije. Commit `ad8bc2d` |
+| **19.08.2026** | **ADR 0001 korak 3b: `occupancy.py`, svih 17 testova prošlo iz prve.** Commit `2cc2926`. Nula mesta sa `BigDecimal ==` u `OccupancySolver.kt` (sva poređenja `<`/`<=`/`>`/`>=`) — Python `Decimal` se za te operatore ponaša identično Kotlinovom `compareTo`, nikakav obilazak nije trebao. Sedam zamki prenete doslovno, uklj. namerno neispravljen bug u rangiranju dece za pomoćni ležaj (§9) — popravka čeka poseban commit posle 3c |
+| 19.08.2026 | Usput otkriveno i rešeno: `apps/scrapers/tests/__init__.py` i `apps/api/tests/__init__.py` su oba pravila paket `tests`, kolizija pri `pytest` kolekciji iz korena. Oba obrisana — nisu ni trebala uz `pytest.ini` rootless import mode |
