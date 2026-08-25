@@ -399,6 +399,19 @@ def parse_hotel_page(html: str, url: str, reference: date | None = None) -> list
                     PriceIn(
                         room_code=p.room_code,
                         room_name=p.room_raw,
+                        # capacity_adults ovde NIJE "koliko odraslih staje u
+                        # osnovne ležaje" (kako ga OccupancySolver inače čita) —
+                        # to je oktopodov "Broj plativih osoba", koliko osoba
+                        # SE NAPLAĆUJE. Za oktopod je cena po plativoj osobi ista
+                        # bez obzira na koji ležaj gost spava, pa se ova dva
+                        # pojma slučajno poklapaju: capacity_extra=0, sve osobe
+                        # u "osnovnom" ležaju, solver pomnoži cenu sa tim brojem
+                        # i dobije isti rezultat kao oktopodov obračun. Prvi
+                        # izvor koji upiše STVARAN broj osnovnih ležaja i pravu
+                        # decu na pomoćnim daje DRUGAČIJU logiku za istu kolonu —
+                        # vidi CLAUDE.md §7 Faza B, "capacity_adults/_extra/_total
+                        # nemaju zajedničko značenje preko izvora" i integracioni
+                        # test test_oktopod_solver_integration.py (poruka 12).
                         capacity_adults=p.capacity_adults,
                         capacity_extra=0,
                         slot=PriceSlot.ADULT,

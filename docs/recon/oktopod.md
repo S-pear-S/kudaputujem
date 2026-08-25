@@ -107,5 +107,18 @@ red 4+  struktura, pomoćni ležaji, plative osobe, pa cena po periodu
 što znači da se cena množi sa 4. Kapacitet se ne mora izvoditi iz oznake sobe —
 agencija ga je već objavila.
 
+**Ovo NIJE isto što i "koliko odraslih staje u osnovne ležaje"** (poruka 12,
+20.08.2026). Oktopod naplaćuje po broju plativih osoba, ne po tome ko spava na
+osnovnom a ko na pomoćnom ležaju — cena po osobi je ista za sve. Adapter upisuje
+taj broj u `PriceIn.capacity_adults` sa `capacity_extra=0` (`oktopod.py:402`),
+što je za OKTOPODOV način naplate slučajno tačno: `OccupancySolver` pomnoži cenu
+sa brojem gostiju i dobije isti iznos kao oktopodov obračun. Ali `capacity_adults`
+po svom imenu i po ostatku solvera znači stvarni broj osnovnih ležaja — prvi izvor
+koji tu kolonu popuni sa pravim rasporedom (stvaran broj osnovnih ležaja +
+`capacity_extra` za decu na pomoćnom) dobija drugačiju logiku za isti podatak.
+Odluka o pravom značenju tri kapacitetne kolone čeka CLAUDE.md §7 Faza B.
+Integracioni test koji ovo dokazuje (parser → solver, ne samo parser sam):
+`apps/scrapers/tests/test_oktopod_solver_integration.py`.
+
 Ostalo: `-` u koloni pomoćnih ležaja znači nula; `*` iza cene je uslovan period
 (fusnota ispod tabele); `1/2 STD RENOV*` — tu je zvezdica deo imena strukture, ne cene.
