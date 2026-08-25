@@ -4,22 +4,33 @@
 > Ako nešto u kodu protivreči ovom fajlu, prvo pitaj — ne pretpostavljaj da je fajl zastareo.
 > Kad doneseš novu odluku ili završiš veću stavku, **ažuriraj ovaj fajl u istom commit-u**.
 
-Poslednje ažuriranje: 20.08.2026. (**`.gitattributes` dodat (pravilo 21) — fixture-i su bili
-CRLF na disku/LF u repou, otkriveno slučajno preko `git status` sa druge mašine, ne testom.
-Prenormalizovano, isti brojevi testova kao pre (193 ukupno), nije bio stvaran bag.** ADR 0001
-korak 2 GOTOV, korak 3 GOTOV ali njegova OPTIMIZACIJA JE U TOKU — vlasnik odlučio da se solver
-optimizuje SADA, pre koraka 4 (prava računica: 285 ms najgori slučaj = ~5.7s po pretrazi, 30+
-sati za `PriceIndexBuilder` PO NAJGOREM SLUČAJU — vidi merenje ispod, stvarna procena je mnogo
-manja). Četiri merenja gotova (0.14/0.16/5.3/~280 ms) plus peto, `minimum_for_adults(1..8)`:
-zbir **10.13 ms po terminu**, na 50.000 termina **~8.4 min (0.14 h)** — ispod pola sata, punjenje
-indeksa NIJE problem, poenta se svodi isključivo na stranicu pretrage (20× `solve()` po upitu).
-`cProfile` sledeći korak, **stani i javi pre bilo koje izmene** — ne pogađaj uzrok, moja prva
-dijagnoza je bila pogrešna i ispravljena. **Cilj (posle poruke 12, konačan): najgori < 50 ms**
-(poruka 11 je prvo tražila <20ms, poruka 12 to ublažila natrag na <50ms pošto je tipičan slučaj
-već daleko ispod svog cilja — vidi §13 istoriju), **tipičan < 2 ms** (nepromenjeno, već
-ispunjeno), svih 25 testova ostaje zeleno bez izmene.
+Poslednje ažuriranje: 26.08.2026. (**`cProfile` pokrenut nad najgorim slučajem (poruka 12,
+tačka 2) — nalaz gotov, JAVLJENO, NIJE MENJAN NIJEDAN RED KODA u solveru, po eksplicitnom
+zahtevu "stani i javi pre bilo koje izmene".** Vrući put: `_best` (rekurzija/memoizacija) →
+`_for_each_child_combination`/`_recurse` (generator kombinacija dece) → `_room_cost`. Memoizacija
+RADI ispravno (413 jedinstvenih stanja od 23.326 poziva `_best`, ~98% pogodaka u kešu) — trošak
+NIJE u promašenom kešu nego u GRANANJU unutar svakog od 413 hladnih stanja (~73 poziva
+`_room_cost` po stanju, sortiranje i `min()` po pozivu). Potvrđuje dijagnozu iz poruke 11, ne
+menja je. Detalji, pun spisak prvih 10 po `cumtime` i po `tottime`, u §9. **Čeka korisnikovo
+"kreni" pre bilo koje izmene algoritma** — poruka 12 tačka 3 (izmene, jedna po jedna, sa merenjem
+posle svake) još nije počela.
+Usput, nezavisno od optimizacije (poruka 12, odeljak "Oktopod: ovo nije bug, nego nešto gore"):
+dva upisa objašnjenja (`oktopod.py` iznad linije 402 sad ima komentar, plus `docs/recon/oktopod.md`)
+o tome da `capacity_adults=4/capacity_extra=0` za oktopod NIJE stvarni kapacitet po ležajevima
+nego oktopodov "Broj plativih osoba" — slučajno se poklapa sa onim što solver očekuje. **Napisan
+i pušten prvi test koji spaja parser i solver** (`test_oktopod_solver_integration.py`) — tvrdnja
+"4 osobe u '1/3+1 STD' = 4 × cena iz tabele = 800.00" **PROLAZI**, potvrđuje slučajnu tačnost, ne
+otkriva bag. §7 Faza B ažuriran da spoji `capacity_adults`/`capacity_extra`/`capacity_total` u
+JEDNU stavku koja traži jednu odluku vlasnika (bilo je razbacano na dva mesta).
+**194 testa ukupno (181 prolazi + 13 preskočeno bez `DATABASE_URL`)** — bilo 193, +1 za novi
+integracioni test, nijedan postojeći rezultat promenjen. `ruff`/`mypy --strict` čisti.
+ADR 0001 korak 2 GOTOV, korak 3 GOTOV ali njegova OPTIMIZACIJA JE U TOKU (poruka 11: 285 ms
+najgori slučaj = ~5.7s po pretrazi na stranici rezultata; peto merenje, poruka 12: punjenje
+`PriceIndexBuilder` indeksa NIJE problem, 0.14h na 50.000 termina). **Cilj: najgori < 50 ms,
+tipičan < 2 ms** (već ispunjen), svih 25 testova u `test_occupancy.py` ostaje zeleno bez izmene.
 Jedan `.venv` u korenu za sva tri Python paketa. Kotlin API još postoji nepromenjen, i dalje
-jedini radni backend — vidi §6/§9. **Ne kreći na korak 3 (izmene) pre profajlera.**)
+jedini radni backend — vidi §6/§9. **Ne kreći na izmene solvera niti na korak 4 dok korisnik ne
+pregleda cProfile nalaz i kaže "kreni".**)
 Repo: `https://github.com/S-pear-S/kudaputujem` · grana `main`
 
 ---
@@ -617,10 +628,22 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
        `room_type` prvi popuni dvoosobnu sobu), memo daje isti ispravan rezultat.
    - **3d** ✓ 19.08.2026 — izmereno, ~285 ms najgori slučaj. **Vlasnik odlučio: optimizuje se
      SADA, pre koraka 4** (prava računica pokazala da 285 ms znači ~5.7s po pretrazi i 30+ sati
-     za `PriceIndexBuilder` — neupotrebljivo). Novi cilj: najgori < 20 ms, tipičan < 2 ms. Moja
-     dijagnoza uzroka je bila pogrešna (ispravljeno), pravi uzrok je grananje unutar stanja, ne
-     memo ključ. Četiri merenja gotova (0.138/0.157/5.276/~280 ms), `cProfile` sledeći. Detalji
-     u §9. **U TOKU — ne kreći na korak 4 dok se ovo ne završi.**
+     za `PriceIndexBuilder` — neupotrebljivo). Novi cilj (poruka 12 ga kasnije ublažila na
+     <50ms): najgori < 20 ms, tipičan < 2 ms. Moja dijagnoza uzroka je bila pogrešna
+     (ispravljeno), pravi uzrok je grananje unutar stanja, ne memo ključ. Četiri merenja gotova
+     (0.138/0.157/5.276/~280 ms), peto (`minimum_for_adults` 1..8, poruka 12) potvrdilo da
+     punjenje indeksa nije problem — sve u §9.
+   - **cProfile** ✓ 26.08.2026 — pokrenut nad najgorim slučajem (8 odraslih + 4 dece, 6 tipova
+     soba + 2 apartmana), **JAVLJENO, kod NIJE menjan** (poruka 12 tačka 2: "stani i javi").
+     Vrući put: `_best` (0.174s od 0.536s self, 23.326 poziva) → `_for_each_child_combination`/
+     `_recurse` (generator kombinacija dece, 237.182 rekurzivna poziva) → `_room_cost` (30.133
+     poziva, `sorted()`/`min()`/`child_price()` unutra). Nezavisno izmereno: samo **413
+     jedinstvenih stanja** u memou od 23.326 poziva `_best` — memoizacija radi ispravno (~98%
+     pogodaka), problem NIJE promašen keš nego rad UNUTAR svakog od 413 hladnih stanja (~73
+     poziva `_room_cost` po stanju: `room_types × take_adults × dečje kombinacije`). Potvrđuje,
+     ne menja, dijagnozu iz poruke 11. Pun spisak prvih 10 po `cumtime` i po `tottime` u §9.
+     **Čeka korisnikovo "kreni" pre bilo koje izmene** — poruka 12 tačka 3 (izmene jedna po
+     jedna, sa merenjem posle svake) nije počela.
    - Detalji zamki: `instrukcije/porukazaclaudecode8.md`. Poznati, namerno neispravljen bug u
      rangiranju dece (zamka 4) — popravka ide u ZASEBAN commit POSLE 3c, ne sad.
    - **Nezavisna provera (poruka 9, 19.08.2026):** korisnik je pročitao `occupancy.py`,
@@ -628,6 +651,14 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
      `BigDecimal ==` potvrđen tačan. Ipak četiri nalaza, prva dva urađena danas (vidi §8
      pravilo 19, §9), preostala dva (`tuple` umesto `list` u dataclass-ovima, testovi za
      deljenje koje se ne završava) i `--import-mode=importlib` čekaju sledeći nastavak.
+   - **Oktopod integracioni test (poruka 12, 26.08.2026)** ✓ — prvi test koji spaja adapter
+     i solver, ne samo svaki odvojeno. `test_oktopod_solver_integration.py`: pravi `1/3+1 STD`
+     iz fixture-a (200 EUR/osobi, "Broj plativih osoba"=4) kroz `parse_hotel_page()`, pa kroz
+     `OccupancySolver.solve()` za 4 odrasla. Tvrdnja `4 × 200 = 800.00` **PROLAZI** — potvrđuje
+     da je `capacity_adults=4/capacity_extra=0` slučajno tačno ZA OKTOPODOV način naplate, ne
+     otkriva bag (da je pukao, to bi bio pravi nalaz — nije). Objašnjenje "zašto" upisano u
+     `oktopod.py` iznad linije 402 (komentar) i `docs/recon/oktopod.md`. Vidi §7 Faza B za
+     odluku koja i dalje čeka vlasnika — tri kapacitetne kolone sa tri nedorečena značenja.
 4. **Korak 4: Ostatak API-ja**, modul po modul: `errors` → `db` → `geo` → `accommodation` →
    `ingest` → `pricing/price_index` → `search`. Svaki modul nosi svoje testove. `numeric` iz
    Postgresa mora stizati kao `Decimal` (psycopg 3), nikad `float`.
@@ -767,20 +798,37 @@ Pun spisak, prošao `V1__init.sql` red po red (kolona → enum → napomena):
 `transport_leg.direction` postoje SAMO kao SQL komentar, nemaju enum ni u Kotlinu ni u Pythonu.
 Oba moraju dobiti pravi enum (u `travelcore`, kolone u bazi) pre nego što Faza B napiše CHECK.
 
-**Van CHECK spiska, ali ista Faza B, traži ODLUKU vlasnika (poruka 11, 19.08.2026):**
+**Van CHECK spiska, ali ista Faza B, traži JEDNU ODLUKU vlasnika (poruka 11 19.08.2026 + poruka
+12 20.08.2026, spojeno u jednu stavku 26.08.2026 — bile su razbacane na dva mesta):**
 
-> `price_option.capacity_total`: ili se čita i ima prednost nad izvedenim zbirom, ili se
-> kolona briše. Trenutno stanje, da se piše a ne čita, je najgore od tri.
+> Tri kapacitetne kolone (`capacity_adults`, `capacity_extra`, `capacity_total`) nemaju
+> zajedničko značenje preko izvora. Treba odlučiti šta svaka TAČNO znači, i koji izvor ima
+> prednost kad se ne slažu.
 
-Nije kozmetika — provereno gde tačno oktopod adapter smešta „Broj plativih osoba" (merodavan
-podatak sa izvora, tačniji od bilo čega izvedenog iz oznake sobe): ide u `PriceIn.capacity_adults`
-(`adapters/oktopod.py:402`, `capacity_adults=p.capacity_adults`), **ne** u `capacity_total` —
-`capacity_total` se u ingest-u uopšte ne postavlja (ostaje `None`). To polje solver i dalje ne bi
-pročitao ni da je postavljeno (§9, nalaz iz koraka 3c). Usput nađeno i vredno pomena, ista tema:
-`_RoomPrice.aux_beds` se parsira (`oktopod.py:283`) ali se pri ingest-u NE mapira na
-`PriceIn.capacity_extra` (koje je tvrdo `capacity_extra=0`, `oktopod.py:403`) — `aux_beds`
-završava samo kao tekst u `notes` (`oktopod.py:410`), ne kao broj koji solver koristi. Nije
-menjano, samo zabeleženo — odluka o oba polja čeka isti razgovor.
+Nije kozmetika, tri nezavisna nalaza koja se spajaju u isti problem:
+
+1. **`price_option.capacity_total` se piše a ne čita.** Kolona postoji u bazi, `PriceIn` je ima
+   kao polje, ali `OccupancySolver._RoomType.capacity_total` je **UVEK** izvedena vrednost
+   (`capacity_adults + capacity_extra`, §9 nalaz iz koraka 3c) — vrednost iz baze se nikad ne
+   čita. Ili se čita i ima prednost nad izvedenim zbirom, ili se kolona briše. Trenutno stanje
+   (piše se, ne čita) je najgore od tri.
+2. **`capacity_adults`/`capacity_extra` menjaju značenje po izvoru.** Solver ih čita kao "koliko
+   odraslih staje u osnovne ležaje" / "koliko na pomoćne". Oktopod adapter u `capacity_adults`
+   upisuje „Broj plativih osoba" — koliko se NAPLAĆUJE, ne koliko spava na osnovnom ležaju
+   (`adapters/oktopod.py:402`, komentar dodat 26.08.2026 objašnjava zašto). Za oktopodov način
+   naplate (cena po osobi ista bez obzira na ležaj) to je **slučajno tačno** — dokazano
+   integracionim testom `test_oktopod_solver_integration.py` (poruka 12, 26.08.2026): `1/3+1 STD`
+   sa 4 osobe kroz pravi parser pa pravi solver daje tačno `4 × 200 = 800.00`. Ali prvi izvor
+   koji upiše STVARAN broj osnovnih ležaja (soleazur/euroturs/... sa pravom tabelom "1/N+K") daje
+   DRUGAČIJU logiku za istu kolonu — dva izvora sa istim hotelom bi tad davala dve različite cene
+   za istu grupu, bez ijedne greške u kodu bilo kog adaptera pojedinačno.
+3. **`aux_beds` se parsira ali se gubi.** `_RoomPrice.aux_beds` se čita iz oktopod tabele
+   (`oktopod.py:283`) ali se pri ingest-u NE mapira na `PriceIn.capacity_extra` (tvrdo
+   `capacity_extra=0`, `oktopod.py:403`) — završava samo kao tekst u `notes` (`oktopod.py:410`),
+   ne kao broj koji solver koristi.
+
+Ništa od ovoga nije menjano — sve zabeleženo, čeka isti razgovor. Odluka mora pokriti sve troje
+odjednom: menjanje samo jedne kolone bez ostale dve premešta problem, ne rešava ga.
 
 ---
 
@@ -902,7 +950,51 @@ menjano, samo zabeleženo — odluka o oba polja čeka isti razgovor.
 | `PriceIndexBuilder.loadDepartures` koristi `Triple` sa ugnježdenim parom | niska, Kotlin, nestaje u koraku 6 | radi, ali je nečitko; pri prevodu u korak 4 pisati kao dataclass/namedtuple umesto tuple-a, ne prevoditi doslovno |
 | Kursna lista ima hardkodovane rezervne vrednosti | srednja | EUR≈117.20 RSD; treba NBS sinhronizacija (§7 stavka 18) |
 | Solver pretpostavlja neograničen broj jedinica svakog tipa | prihvaćeno | dokumentovano, mora se reći korisniku u UI-ju. Preneti napomenu u `pricing/occupancy.py` docstring kad se prevede (korak 3) |
-| **`OccupancySolver.solve()` performanse — VLASNIK ODLUČIO: optimizuje se SADA, pre koraka 4** | **visoka, u toku** | Izmereno 19.08.2026. Istorija cilja, tri koraka: 50ms (poruka 9, napamet) → poruka 11 preračunala stvarnu upotrebu (`SearchService` po redu stranice ×20, `PriceIndexBuilder` po terminu×8 `pax` na 50.000 termina = 400.000 poziva, najgori slučaj 30+ sati) i postavila **<20ms** → poruka 12 ublažila NAZAD na **<50ms** pošto je tipičan slučaj već ~20× ispod svog cilja (2ms) i sam po sebi rešen, pa agresivniji cilj za rep raspodele nije opravdan istom logikom. **Konačan cilj: najgori slučaj < 50 ms, tipičan < 2 ms** (tipičan nepromenjen kroz sve tri iteracije, već ispunjen). Razlog za "sada, ne posle koraka 4": oblik `SearchService`-a zavisi od toga da li `solve()` košta 0.3 ms ili 300 ms, i 25 testova je zeleno baš sada — jedini trenutak gde se implementacija menja a specifikacija stoji nepomično. **Moja dijagnoza (memo ključ ne hvata granularnost po tipu sobe) je bila POGREŠNA, ispravljeno od korisnika**: ključ `(adults, counts, rooms_used)` je ispravan — dodavanje tipa sobe u ključ bi POVEĆALO broj stanja (usporilo, ne ubrzalo), jer stanje posle smeštanja jedne sobe stvarno ne zavisi od toga koji je tip korišćen. Broj stanja je mali (~stotine). Trošak je u GRANANJU unutar svakog stanja — `room_types × take_adults × kombinacije dece` je blizu hiljadu poziva `_room_cost` po stanju, svaki sa `sorted()` i `Decimal` množenjima. **Četiri merenja (`timeit`, najbolje od 5×5):** 2 odrasla/bez dece/4 tipa = **0.138 ms**; 2 odrasla+1 dete/4 tipa = **0.157 ms**; 4 odrasla+2 dece/6 tipova = **5.276 ms**; najgori slučaj (8 odraslih+4 dece/6 soba+2 apartmana) = **~280 ms**. Tipičan slučaj je već daleko ispod cilja — problem je specifično u repnom (velika grupa, mnogo tipova soba) delu raspodele. **Peto merenje, 20.08.2026 (poruka 12, pre `cProfile`-a): `minimum_for_adults` (bez dece), 8 tipova soba, adults=1..8** — `0.229 / 0.223 / 0.466 / 0.872 / 0.950 / 2.089 / 2.395 / 2.911` ms. **Zbir: 10.13 ms po terminu.** `PriceIndexBuilder` poziva ovo za 8 vrednosti pax po terminu (§7 korak 4 / Kotlin `PriceIndexBuilder.kt`) — na 50.000 termina to je **506.7 s ≈ 8.4 min ≈ 0.14 h, ispod pola sata.** Zaključak iz poruke 12: punjenje indeksa NIJE problem, optimizacija se svodi isključivo na stranicu pretrage (`SearchService.applyExactPricing`, 20× `solve()` po upitu, i tu 285 ms najgori slučaj znači ~5.7 s). Sledeće: `cProfile` nad najgorim slučajem (8 odraslih+4 dece/8 tipova), prvih 10 po `cumtime` i po `tottime` — **stani i javi pre bilo koje izmene koda.** |
+| **`OccupancySolver.solve()` performanse — VLASNIK ODLUČIO: optimizuje se SADA, pre koraka 4** | **visoka, u toku** | Izmereno 19.08.2026. Istorija cilja, tri koraka: 50ms (poruka 9, napamet) → poruka 11 preračunala stvarnu upotrebu (`SearchService` po redu stranice ×20, `PriceIndexBuilder` po terminu×8 `pax` na 50.000 termina = 400.000 poziva, najgori slučaj 30+ sati) i postavila **<20ms** → poruka 12 ublažila NAZAD na **<50ms** pošto je tipičan slučaj već ~20× ispod svog cilja (2ms) i sam po sebi rešen, pa agresivniji cilj za rep raspodele nije opravdan istom logikom. **Konačan cilj: najgori slučaj < 50 ms, tipičan < 2 ms** (tipičan nepromenjen kroz sve tri iteracije, već ispunjen). Razlog za "sada, ne posle koraka 4": oblik `SearchService`-a zavisi od toga da li `solve()` košta 0.3 ms ili 300 ms, i 25 testova je zeleno baš sada — jedini trenutak gde se implementacija menja a specifikacija stoji nepomično. **Moja dijagnoza (memo ključ ne hvata granularnost po tipu sobe) je bila POGREŠNA, ispravljeno od korisnika**: ključ `(adults, counts, rooms_used)` je ispravan — dodavanje tipa sobe u ključ bi POVEĆALO broj stanja (usporilo, ne ubrzalo), jer stanje posle smeštanja jedne sobe stvarno ne zavisi od toga koji je tip korišćen. Broj stanja je mali (~stotine). Trošak je u GRANANJU unutar svakog stanja — `room_types × take_adults × kombinacije dece` je blizu hiljadu poziva `_room_cost` po stanju, svaki sa `sorted()` i `Decimal` množenjima. **Četiri merenja (`timeit`, najbolje od 5×5):** 2 odrasla/bez dece/4 tipa = **0.138 ms**; 2 odrasla+1 dete/4 tipa = **0.157 ms**; 4 odrasla+2 dece/6 tipova = **5.276 ms**; najgori slučaj (8 odraslih+4 dece/6 soba+2 apartmana) = **~280 ms**. Tipičan slučaj je već daleko ispod cilja — problem je specifično u repnom (velika grupa, mnogo tipova soba) delu raspodele. **Peto merenje, 20.08.2026 (poruka 12, pre `cProfile`-a): `minimum_for_adults` (bez dece), 8 tipova soba, adults=1..8** — `0.229 / 0.223 / 0.466 / 0.872 / 0.950 / 2.089 / 2.395 / 2.911` ms. **Zbir: 10.13 ms po terminu.** `PriceIndexBuilder` poziva ovo za 8 vrednosti pax po terminu (§7 korak 4 / Kotlin `PriceIndexBuilder.kt`) — na 50.000 termina to je **506.7 s ≈ 8.4 min ≈ 0.14 h, ispod pola sata.** Zaključak iz poruke 12: punjenje indeksa NIJE problem, optimizacija se svodi isključivo na stranicu pretrage (`SearchService.applyExactPricing`, 20× `solve()` po upitu, i tu 285 ms najgori slučaj znači ~5.7 s). **`cProfile` (26.08.2026, poruka 12 tačka 2), nad sintetičkim najgorim slučajem (8 odraslih+4 dece, 6 tipova soba+2 apartmana, pun set slotova po hotelskom tipu) — kod NIJE menjan, samo izmereno:**
+
+```
+995.070 poziva (772.465 primitivnih) u 0.536s (pod profajlerom — bez njega isti scenario meri
+~351ms sirovim timeit-om, u skladu sa ranijim ~280ms na malo drugačijem sintetičkom skupu)
+
+prvih 10 po cumtime:
+ncalls        tottime  cumtime  funkcija
+1             0.000    0.538    occupancy.py:134 solve
+23326/1       0.174    0.535    occupancy.py:371 _best
+37902         0.017    0.167    occupancy.py:351 _for_each_child_combination
+237182/37902  0.124    0.149    occupancy.py:359 _recurse
+30133         0.065    0.129    occupancy.py:280 _room_cost
+13695         0.009    0.034    {builtins.sorted}
+202520        0.030    0.030    {builtins.len}
+92769         0.028    0.028    {builtins.min}
+15240         0.007    0.025    occupancy.py:312 _child_key
+120532        0.024    0.024    {list.extend}
+
+prvih 10 po tottime:
+23326/1       0.174    0.535    occupancy.py:371 _best
+237182/37902  0.124    0.149    occupancy.py:359 _recurse
+30133         0.065    0.129    occupancy.py:280 _room_cost
+202520        0.030    0.030    {builtins.len}
+92769         0.028    0.028    {builtins.min}
+120532        0.024    0.024    {list.extend}
+116625        0.021    0.021    occupancy.py:413 <genexpr> (tuple(counts[i]-combo[i] ...))
+37902         0.017    0.167    occupancy.py:351 _for_each_child_combination
+19355         0.013    0.022    occupancy.py:221 child_price
+13695         0.009    0.034    {builtins.sorted}
+```
+
+**Nezavisno izmereno (bez profajlera, brojanjem):** memo ima samo **413 jedinstvenih stanja**
+(`(adults, counts, rooms_used)`) od 23.326 poziva `_best` — memoizacija radi ispravno, ~98%
+poziva je keš pogodak koji se vraća gotovo trenutno. **Trošak nije u promašenom kešu, nego u
+radu UNUTAR svakog od 413 "hladnih" stanja**: prosečno ~73 poziva `_room_cost` po stanju
+(30.133/413) i ~92 poziva generatora dečjih kombinacija po stanju (37.902/413) — `room_types(8)
+× take_adults × kombinacije dece` grananje koje je tačno opisano u poruci 11, sad i izmereno.
+Uočena i moguća sitna redundansa (nije potvrđena kao glavni trošak, samo primećena): `_child_key`
+poziva `room_type.child_price(age)` za sortiranje, pa se `child_price` poziva PONOVO u
+`_room_cost` petlji za istu decu koja završe na pomoćnom ležaju — dva poziva `child_price()` po
+detetu tamo gde bi mogao biti jedan. `_for_each_child_combination`/`_recurse` (rekurzivni
+generator) je sam po sebi skup zbog Python generator-poziv overhead-a (237.182 rekurzivna poziva
+za samo 37.902 vrhova poziva). **Ništa od ovoga nije menjano — čeka korisnikovo "kreni" pre bilo
+koje izmene (poruka 12 tačka 3), kreće se po ovom nalazu, ne po spisku kandidata iz poruke 11.** |
 | `raw_document` će brzo rasti | srednja | brisati starije od 30 dana, particionisati po mesecu preko 50 GB |
 | Nema CI | srednja | testovi se za sada pokreću ručno; CI plan je §7 stavka 19, čeka da se Kotlin sklone iz matrice |
 | Fixture je skraćen na 2 od 10 sekcija (soleazur) | niska | pokriva sve strukturne slučajeve; puna stranica ima 84 reda |
@@ -1024,11 +1116,14 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
    koraka 4** (§9). Cilj korigovan 19.08 (poruka 12): najgori < 50ms (ne <20ms kako je poruka 11
    prvo rekla), tipičan < 2ms nepromenjen. `minimum_for_adults(1..8)` izmereno 20.08: punjenje
    indeksa nije odvojen problem (0.14h na 50.000 termina), pa je cela stvar sad samo stranica
-   pretrage. Trenutno otvoreno: da li je cilj dostižan bez menjanja algoritma — `cProfile` je
-   sledeći korak, **stani i javi pre izmene koda**, po eksplicitnom zahtevu iz poruke 12.
-   **Ne kreći na korak 4 dok se optimizacija ne završi i cifra ne potvrdi.** Ovaj obrazac
-   (pitanje o sledećem koraku, pauza pre nastavka) se ponovio već SEDAM puta — i dalje ne
-   pretpostavljaj da je pauza gotova bez eksplicitnog "kreni".
+   pretrage. **`cProfile` urađen i javljen 26.08.2026** (§7, §9) — vrući put `_best` →
+   `_for_each_child_combination`/`_recurse` → `_room_cost`, memoizacija radi ispravno (413
+   stanja, ~98% keš pogodaka), trošak je u grananju unutar hladnih stanja, potvrđuje dijagnozu
+   iz poruke 11. **Trenutno otvoreno, čeka korisnika: koju izmenu prvu probati** (kandidati iz
+   poruke 11 i dalje stoje kao mogućnosti, ali "kreni po nalazu profajlera, ne po mom spisku" —
+   redosled i izbor pripada sledećem "kreni"). **Ne kreći na izmenu koda niti na korak 4 dok
+   korisnik ne kaže "kreni".** Ovaj obrazac (pitanje o sledećem koraku, pauza pre nastavka) se
+   ponovio već OSAM puta — i dalje ne pretpostavljaj da je pauza gotova bez eksplicitnog "kreni".
 
 ---
 
@@ -1108,3 +1203,5 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | 20.08.2026 | Posle prenormalizacije: **pun `pytest` daje identične brojeve kao pre** (193 ukupno, 25 u `test_occupancy.py`) — CRLF/LF razlika nije menjala nijedan rezultat, bila je neproverena pretpostavka, ne stvaran bag. `ruff`/`mypy --strict`/`lint-imports` čisti. Pravilo 21 upisano (§8) |
 | 20.08.2026 | Poruka 12 (pročitana posle CRLF posla, po eksplicitnom redosledu "13 prvo, pa 12"): **cilj za `solve()` korigovan NAZAD sa <20ms (poruka 11) na <50ms.** Razlog: tipičan slučaj je već ~20× ispod svog cilja (2ms) i sam po sebi rešen — problem je isključivo u repu raspodele, i agresivniji cilj tamo nije opravdan istom logikom koja je opravdala odstupanje od originalnog (napamet postavljenog) 50ms. Tipičan cilj (<2ms) nepromenjen. Pre `cProfile`-a traži se još jedno merenje: `minimum_for_adults` (bez dece) za 1–8 odraslih, zbir svih osam, procena u satima za `PriceIndexBuilder` na 50.000 termina — ako je ispod pola sata, punjenje indeksa nije problem |
 | **20.08.2026** | **Poruka 12, korak 1 — `minimum_for_adults(1..8)` izmereno, 8 tipova soba: zbir 10.13 ms po terminu, 50.000 termina ≈ 8.4 min (0.14 h).** Ispod pola sata → punjenje indeksa NIJE odvojen problem, cela optimizacija se svodi na stranicu pretrage (`solve()` × 20 redova). Sledeći korak po redosledu instrukcije: `cProfile` nad najgorim slučajem, stani i javi pre izmene koda |
+| **26.08.2026** | **Poruka 12, korak 2 — `cProfile` pokrenut nad najgorim slučajem, kod NIJE menjan, javljeno korisniku.** Vrući put: `_best` → `_for_each_child_combination`/`_recurse` (generator dečjih kombinacija) → `_room_cost`. Nezavisno izbrojano (van profajlera): 413 jedinstvenih stanja u memou od 23.326 poziva `_best` — memoizacija radi ispravno (~98% keš pogodaka), trošak NIJE u promašenom kešu nego u radu unutar svakog hladnog stanja (~73 poziva `_room_cost` po stanju). Ovo potvrđuje, ne menja, dijagnozu iz poruke 11 ("grananje unutar stanja"). Prvih 10 po `cumtime` i po `tottime` upisano u §9. Čeka korisnikovo "kreni" pre bilo koje izmene algoritma |
+| **26.08.2026** | **Poruka 12, "Oktopod: ovo nije bug, nego nešto gore" — urađeno sve troje.** (1) Komentar u `oktopod.py` iznad linije 402 i pasus u `docs/recon/oktopod.md`, oba objašnjavaju da `capacity_adults` za oktopod nosi "koliko se naplaćuje" (oktopodov model), ne "koliko staje u osnovne ležaje" (solverovo očekivanje) — poklapaju se slučajno. (2) `price_option.capacity_total` nalaz (poruka 11) i ovaj nalaz spojeni u JEDNU stavku u §7 Faza B — tri kapacitetne kolone, tri nedorečena značenja, jedna odluka. (3) Prvi integracioni test koji spaja parser i solver: `test_oktopod_solver_integration.py` — pravi `1/3+1 STD` (200 EUR, "Broj plativih osoba"=4) kroz `parse_hotel_page()` pa kroz `OccupancySolver.solve()` za 4 odrasla, tvrdnja `4×200=800.00` **PROLAZI** (da je pukla, to bi bio pravi nalaz — ovako potvrđuje slučajnu tačnost). 194 testa ukupno (bilo 193, +1), `ruff`/`mypy --strict` čisti |
