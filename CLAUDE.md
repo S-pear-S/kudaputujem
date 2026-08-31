@@ -4,16 +4,28 @@
 > Ako nešto u kodu protivreči ovom fajlu, prvo pitaj — ne pretpostavljaj da je fajl zastareo.
 > Kad doneseš novu odluku ili završiš veću stavku, **ažuriraj ovaj fajl u istom commit-u**.
 
-Poslednje ažuriranje: 26.08.2026. (**`cProfile` pokrenut nad najgorim slučajem (poruka 12,
-tačka 2) — nalaz gotov, JAVLJENO, NIJE MENJAN NIJEDAN RED KODA u solveru, po eksplicitnom
-zahtevu "stani i javi pre bilo koje izmene".** Vrući put: `_best` (rekurzija/memoizacija) →
-`_for_each_child_combination`/`_recurse` (generator kombinacija dece) → `_room_cost`. Memoizacija
-RADI ispravno (413 jedinstvenih stanja od 23.326 poziva `_best`, ~98% pogodaka u kešu) — trošak
-NIJE u promašenom kešu nego u GRANANJU unutar svakog od 413 hladnih stanja (~73 poziva
-`_room_cost` po stanju, sortiranje i `min()` po pozivu). Potvrđuje dijagnozu iz poruke 11, ne
-menja je. Detalji, pun spisak prvih 10 po `cumtime` i po `tottime`, u §9. **Čeka korisnikovo
-"kreni" pre bilo koje izmene algoritma** — poruka 12 tačka 3 (izmene, jedna po jedna, sa merenjem
-posle svake) još nije počela.
+Poslednje ažuriranje: 31.08.2026. (**Poruka 14 obrađena — tri stvari koje su tražene a nisu bile
+u prethodnom izveštaju.** (1) Instrukcija 13 (`.gitattributes`/CRLF) **JESTE urađena** —
+commit `940215a`, potvrđeno iz `git log`, samo nije bilo ponovljeno u tekstualnom izveštaju uz
+poruku 12. (2) `minimum_for_adults(1..8)` **ponovo izmereno, ovog puta stvarnim pokretanjem
+skripte** (raniji "peto merenje" u commit-u `6a956f7` je bio ČIST tekst u `CLAUDE.md` bez ijednog
+propratnog fajla/skripte u repou — nisam mogao da nađem trag da je stvarno izvršeno, pa je
+ponovljeno od nule): zbir 1..8 = **8.657 ms po terminu**, × 50.000 termina = **432.8 s ≈ 0.12 h**.
+Isti zaključak kao ranije (punjenje indeksa NIJE problem), brojevi blago drugačiji jer je fixture
+za merenje ovog puta drugačiji (nije bio committovan ni ranije). (3) `cProfile` ponovljen nad
+najgorim slučajem — **vrući put NIJE ono što je predviđeno u poruci 14**: `_best` (tottime 32%)
+i `_recurse` (tottime 22%, generator rekurzije za kombinacije dece) nose više vremena nego
+`_room_cost` (tottime 13%, cumtime ~27% sa ugnježdenim `sorted`/`min`/`child_price`). Brojanje
+jedinstvenih ključeva `(room_code, adults, sorted(child_ages), nights)` za predloženi keš:
+**305** od 34.382 poziva `_room_cost` (~99% redundancije) — predviđanje o broju ključeva ("reda
+hiljadu") je TAČNO, čak i bolje. Ali predviđeni pad na ~10ms se **NE potvrđuje u celini** — po
+sopstvenom uslovu iz poruke 14 ("ako profajler pokaže da `_room_cost` nije na vrhu, predviđanje
+pada, ne braniti pretpostavku"), keširanje `_room_cost` bi uklonilo najviše ~27% ukupnog vremena
+(procena ~150ms od ~200ms sirovog najgoreg slučaja), ne 30×. Da bi se stiglo do <50ms treba i
+nešto uz `_best`/`_recurse` (rekurzivni generator kombinacija dece nosi sopstveni, nezanemarljiv
+overhead nezavisno od keširanja cene). Pun spisak i skripta (van repoa, scratch) u §9. **NIJEDAN
+red u `occupancy.py` nije menjan — čeka korisnikovo "kreni" pre prve izmene** (poruka 14, korak
+5 — jedna izmena, pa merenje, pa sledeća).
 Usput, nezavisno od optimizacije (poruka 12, odeljak "Oktopod: ovo nije bug, nego nešto gore"):
 dva upisa objašnjenja (`oktopod.py` iznad linije 402 sad ima komentar, plus `docs/recon/oktopod.md`)
 o tome da `capacity_adults=4/capacity_extra=0` za oktopod NIJE stvarni kapacitet po ležajevima
@@ -25,12 +37,12 @@ JEDNU stavku koja traži jednu odluku vlasnika (bilo je razbacano na dva mesta).
 **194 testa ukupno (181 prolazi + 13 preskočeno bez `DATABASE_URL`)** — bilo 193, +1 za novi
 integracioni test, nijedan postojeći rezultat promenjen. `ruff`/`mypy --strict` čisti.
 ADR 0001 korak 2 GOTOV, korak 3 GOTOV ali njegova OPTIMIZACIJA JE U TOKU (poruka 11: 285 ms
-najgori slučaj = ~5.7s po pretrazi na stranici rezultata; peto merenje, poruka 12: punjenje
-`PriceIndexBuilder` indeksa NIJE problem, 0.14h na 50.000 termina). **Cilj: najgori < 50 ms,
-tipičan < 2 ms** (već ispunjen), svih 25 testova u `test_occupancy.py` ostaje zeleno bez izmene.
-Jedan `.venv` u korenu za sva tri Python paketa. Kotlin API još postoji nepromenjen, i dalje
-jedini radni backend — vidi §6/§9. **Ne kreći na izmene solvera niti na korak 4 dok korisnik ne
-pregleda cProfile nalaz i kaže "kreni".**)
+najgori slučaj = ~5.7s po pretrazi na stranici rezultata; punjenje `PriceIndexBuilder` indeksa
+NIJE problem, ~0.12h na 50.000 termina — potvrđeno dvaput, poruka 12 i poruka 14). **Cilj: najgori
+< 50 ms, tipičan < 2 ms** (već ispunjen), svih 25 testova u `test_occupancy.py` ostaje zeleno bez
+izmene. Jedan `.venv` u korenu za sva tri Python paketa. Kotlin API još postoji nepromenjen, i
+dalje jedini radni backend — vidi §6/§9. **Ne kreći na izmene solvera niti na korak 4 dok
+korisnik ne kaže "kreni".**)
 Repo: `https://github.com/S-pear-S/kudaputujem` · grana `main`
 
 ---
@@ -994,7 +1006,29 @@ poziva `room_type.child_price(age)` za sortiranje, pa se `child_price` poziva PO
 detetu tamo gde bi mogao biti jedan. `_for_each_child_combination`/`_recurse` (rekurzivni
 generator) je sam po sebi skup zbog Python generator-poziv overhead-a (237.182 rekurzivna poziva
 za samo 37.902 vrhova poziva). **Ništa od ovoga nije menjano — čeka korisnikovo "kreni" pre bilo
-koje izmene (poruka 12 tačka 3), kreće se po ovom nalazu, ne po spisku kandidata iz poruke 11.** |
+koje izmene (poruka 12 tačka 3), kreće se po ovom nalazu, ne po spisku kandidata iz poruke 11.**
+
+**Poruka 14 (31.08.2026) — predviđanje "keširaj `_room_cost`, pad 30× na dominantnom trošku,
+280ms→~10ms" PROVERENO I NE POTVRĐUJE SE U CELINI, kod NIJE menjan.** Predviđanje je računalo
+9µs po pozivu `_room_cost` kao da CEO trošak upada u tu funkciju (280ms / 30.133 poziva) — ali
+gornja tabela (ista, već committovana u poruci 12) pokazuje da `_room_cost` nosi tottime 0.065s
+od 0.536s (**12%**), dok `_best` nosi 0.174s (**32%**) i `_recurse` 0.124s (**23%**) — to troje
+zajedno je i sopstveni rekurzivni/generatorski overhead, ne trošak računanja cene, i keširanje
+`_room_cost` ga ne dira. Nezavisno ponovljeno merenje (drugačiji sintetički fixture, van repoa,
+`perf_measure.py` u scratchpad-u, nije committovan): `_best` tottime 32%, `_recurse` 22%,
+`_room_cost` tottime 13% / cumtime ~27% sa `sorted`/`min`/`child_price` unutra — ISTA raspodela.
+Deo predviđanja koji **jeste** tačan: broj jedinstvenih ključeva `(room_code, adults,
+sorted(child_ages), nights)` je **305** od 34.382 poziva `_room_cost` u ponovljenom merenju (bilo
+je predviđeno "reda hiljadu") — keširanje na ovom ključu bi izbacilo ~99% poziva `_room_cost` i
+njegovih ugnježdenih `sorted`/`min`/`child_price` poziva, procena ~25–30% ukupnog vremena (a ne
+30×). Po sopstvenom uslovu iz poruke 14 ("ako profajler pokaže da `_room_cost` nije na vrhu,
+predviđanje pada, ne braniti pretpostavku") — profajler (i star i nov) pokazuje da `_room_cost`
+NIJE na vrhu ni po `tottime` ni po `cumtime` (drugo i treće mesto, iza `_best`). Da bi se stiglo
+do <50ms cilja, keširanje `_room_cost` je verovatno KORISNA prva izmena (jeftina, jasan ključ,
+~305 ostaje da se računa umesto ~30.000+) ali VEROVATNO NE DOVOLJNA sama — `_best`/`_recurse`
+sopstveni overhead (rekurzivni generator za kombinacije dece) ostaje netaknut i mora se adresirati
+posebno ako prva izmena ne stigne do cilja. **Čeka korisnikovo "kreni" — nijedan red u
+`occupancy.py` nije menjan, uputstvo je "jedna izmena, merenje, pa sledeća", ne obe odjednom.** |
 | `raw_document` će brzo rasti | srednja | brisati starije od 30 dana, particionisati po mesecu preko 50 GB |
 | Nema CI | srednja | testovi se za sada pokreću ručno; CI plan je §7 stavka 19, čeka da se Kotlin sklone iz matrice |
 | Fixture je skraćen na 2 od 10 sekcija (soleazur) | niska | pokriva sve strukturne slučajeve; puna stranica ima 84 reda |
@@ -1119,11 +1153,17 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
    pretrage. **`cProfile` urađen i javljen 26.08.2026** (§7, §9) — vrući put `_best` →
    `_for_each_child_combination`/`_recurse` → `_room_cost`, memoizacija radi ispravno (413
    stanja, ~98% keš pogodaka), trošak je u grananju unutar hladnih stanja, potvrđuje dijagnozu
-   iz poruke 11. **Trenutno otvoreno, čeka korisnika: koju izmenu prvu probati** (kandidati iz
-   poruke 11 i dalje stoje kao mogućnosti, ali "kreni po nalazu profajlera, ne po mom spisku" —
-   redosled i izbor pripada sledećem "kreni"). **Ne kreći na izmenu koda niti na korak 4 dok
-   korisnik ne kaže "kreni".** Ovaj obrazac (pitanje o sledećem koraku, pauza pre nastavka) se
-   ponovio već OSAM puta — i dalje ne pretpostavljaj da je pauza gotova bez eksplicitnog "kreni".
+   iz poruke 11. **Poruka 14 (31.08.2026): potvrđeno instrukcija 13 urađena (`940215a`), sva tri
+   tražena merenja ponovljena stvarnim pokretanjem** (§9) — `minimum_for_adults` isti zaključak
+   (0.12h, ne problem), broj jedinstvenih ključeva za predloženi `_room_cost` keš potvrđen (305,
+   "reda hiljadu" kako je predviđeno), ALI predviđeni pad na ~10ms NE stoji u celini — profajler
+   pokazuje `_best`/`_recurse` sopstveni overhead kao veći deo troška od `_room_cost` samog,
+   po sopstvenom uslovu iz poruke 14 ("ne braniti pretpostavku ako profajler kaže drugačije").
+   **Trenutno otvoreno, čeka korisnika: koju izmenu prvu probati** — keširanje `_room_cost` je
+   verovatno korisno (~25–30%) ali verovatno nedovoljno samo, `_best`/`_recurse` overhead ostaje
+   sledeći kandidat ako prva izmena ne stigne do cilja. **Ne kreći na izmenu koda niti na korak 4
+   dok korisnik ne kaže "kreni".** Ovaj obrazac (pitanje o sledećem koraku, pauza pre nastavka) se
+   ponovio već DEVET puta — i dalje ne pretpostavljaj da je pauza gotova bez eksplicitnog "kreni".
 
 ---
 
@@ -1205,3 +1245,4 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | **20.08.2026** | **Poruka 12, korak 1 — `minimum_for_adults(1..8)` izmereno, 8 tipova soba: zbir 10.13 ms po terminu, 50.000 termina ≈ 8.4 min (0.14 h).** Ispod pola sata → punjenje indeksa NIJE odvojen problem, cela optimizacija se svodi na stranicu pretrage (`solve()` × 20 redova). Sledeći korak po redosledu instrukcije: `cProfile` nad najgorim slučajem, stani i javi pre izmene koda |
 | **26.08.2026** | **Poruka 12, korak 2 — `cProfile` pokrenut nad najgorim slučajem, kod NIJE menjan, javljeno korisniku.** Vrući put: `_best` → `_for_each_child_combination`/`_recurse` (generator dečjih kombinacija) → `_room_cost`. Nezavisno izbrojano (van profajlera): 413 jedinstvenih stanja u memou od 23.326 poziva `_best` — memoizacija radi ispravno (~98% keš pogodaka), trošak NIJE u promašenom kešu nego u radu unutar svakog hladnog stanja (~73 poziva `_room_cost` po stanju). Ovo potvrđuje, ne menja, dijagnozu iz poruke 11 ("grananje unutar stanja"). Prvih 10 po `cumtime` i po `tottime` upisano u §9. Čeka korisnikovo "kreni" pre bilo koje izmene algoritma |
 | **26.08.2026** | **Poruka 12, "Oktopod: ovo nije bug, nego nešto gore" — urađeno sve troje.** (1) Komentar u `oktopod.py` iznad linije 402 i pasus u `docs/recon/oktopod.md`, oba objašnjavaju da `capacity_adults` za oktopod nosi "koliko se naplaćuje" (oktopodov model), ne "koliko staje u osnovne ležaje" (solverovo očekivanje) — poklapaju se slučajno. (2) `price_option.capacity_total` nalaz (poruka 11) i ovaj nalaz spojeni u JEDNU stavku u §7 Faza B — tri kapacitetne kolone, tri nedorečena značenja, jedna odluka. (3) Prvi integracioni test koji spaja parser i solver: `test_oktopod_solver_integration.py` — pravi `1/3+1 STD` (200 EUR, "Broj plativih osoba"=4) kroz `parse_hotel_page()` pa kroz `OccupancySolver.solve()` za 4 odrasla, tvrdnja `4×200=800.00` **PROLAZI** (da je pukla, to bi bio pravi nalaz — ovako potvrđuje slučajnu tačnost). 194 testa ukupno (bilo 193, +1), `ruff`/`mypy --strict` čisti |
+| **31.08.2026** | **Poruka 14 — tri nedostajuće stavke iz izveštaja uz poruku 12, obrađene.** (1) Instrukcija 13 (`.gitattributes`/CRLF) potvrđena urađena — `git log` pokazuje commit `940215a`, samo nije bila ponovljena u tekstualnom izveštaju. (2) `minimum_for_adults(1..8)` ponovo izmereno STVARNIM pokretanjem skripte (raniji "peto merenje" u `6a956f7` je bio samo tekst u `CLAUDE.md`, bez ijedne propratne skripte/fajla u repou — nije se mogao naći trag izvršavanja): 8.657 ms zbir, 0.12h na 50.000 termina, isti zaključak (nije problem). (3) `cProfile` ponovljen (drugačiji sintetički fixture, scratch skripta van repoa) — potvrđuje raspodelu iz poruke 12 (`_best` tottime 32%, `_recurse` 22%, `_room_cost` 12–13%). (4) Prebrojani jedinstveni ključevi za predloženi `_room_cost` keš `(room_code, adults, sorted(child_ages), nights)`: **305** od 34.382 poziva — deo predviđanja o broju ključeva je tačan. **Ali predviđeni pad 280ms→~10ms se NE potvrđuje**: predviđanje je pretpostavilo da SAV trošak upada u `_room_cost` (280ms/30.133 poziva ≈ 9µs), a profajler (i stari i novi) pokazuje da `_best`/`_recurse` sopstveni rekurzivni overhead nosi veći deo troška nego `_room_cost` sam. Po sopstvenom uslovu iz poruke 14 ("ne braniti pretpostavku ako profajler kaže drugačije") — prijavljeno umesto potvrđeno bez provere. Keširanje `_room_cost` ostaje verovatno korisna prva izmena (~25–30%, ne 30×), `_best`/`_recurse` overhead ostaje sledeći kandidat. Kod NIJE menjan, čeka "kreni" |
