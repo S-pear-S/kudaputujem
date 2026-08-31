@@ -36,7 +36,9 @@ filtriranje miliona redova — za to postoji `departure_price_index`.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+import functools
+import itertools
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -155,17 +157,13 @@ class OccupancySolver:
         age_classes = sorted(set(party.child_ages))
         initial_counts = tuple(party.child_ages.count(cls) for cls in age_classes)
 
-        memo: dict[tuple[int, tuple[int, ...], int], _Result] = {}
-        result = _best(
+        best = _make_best(
             room_types=room_types,
             age_classes=age_classes,
             nights=nights,
             required_rooms=party.rooms,
-            adults=party.adults,
-            counts=initial_counts,
-            rooms_used=0,
-            memo=memo,
         )
+        result = best(party.adults, initial_counts, 0)
 
         if result.cost >= _UNSOLVABLE:
             return None
@@ -348,98 +346,118 @@ def _room_cost(
     return cost
 
 
-def _for_each_child_combination(
+@functools.cache
+def _child_combinations(
     counts: tuple[int, ...], free_slots: int
-) -> Iterator[tuple[int, ...]]:
-    """Nabraja sve kombinacije broja dece po uzrasnoj klasi koje staju u `free_slots`."""
+) -> tuple[tuple[int, ...], ...]:
+    """Sve kombinacije broja dece po uzrasnoj klasi koje staju u `free_slots`.
+
+    Bio je rekurzivni generator (`yield from` ugnježdeno po uzrasnoj klasi) —
+    237.182 rekurzivna poziva za samo 37.902 vrhova poziva u profajleru (poruka
+    12), čist CPython generator/poziv-overhead, ne aritmetika. `counts` ima
+    najviše `MAX_CHILDREN` (4) elemenata koji ukupno saberu najviše 4, pa je
+    `itertools.product` nad malim opsezima jeftinije od ručne rekurzije, i
+    rezultat zavisi SAMO od (counts, free_slots) — vredi keširati preko poziva
+    `solve()`, ne samo unutar jednog (poruka 14, izmena 2). Isti skup i isti
+    redosled kombinacija kao stara rekurzija: „poslednja klasa se menja
+    najbrže" važi i za ugnježdene petlje i za `itertools.product`, a naknadno
+    filtriranje po ukupnom zbiru ne remeti redosled preostalih.
+    """
     if free_slots < 0:
-        return
-    combo = [0] * len(counts)
-
-    def _recurse(index: int, used: int) -> Iterator[tuple[int, ...]]:
-        if index == len(counts):
-            yield tuple(combo)
-            return
-        for take in range(0, min(counts[index], free_slots - used) + 1):
-            combo[index] = take
-            yield from _recurse(index + 1, used + take)
-        combo[index] = 0
-
-    yield from _recurse(0, 0)
+        return ()
+    ranges = [range(count + 1) for count in counts]
+    return tuple(combo for combo in itertools.product(*ranges) if sum(combo) <= free_slots)
 
 
-def _best(
+def _make_best(
     room_types: list[_RoomType],
     age_classes: list[int],
     nights: int,
     required_rooms: int | None,
-    adults: int,
-    counts: tuple[int, ...],
-    rooms_used: int,
-    memo: dict[tuple[int, tuple[int, ...], int], _Result],
-) -> _Result:
-    if adults == 0 and sum(counts) == 0:
-        if required_rooms is None or rooms_used == required_rooms:
-            return _Result(Decimal(0), [])
-        return _Result(_UNSOLVABLE, [])
+) -> Callable[[int, tuple[int, ...], int], _Result]:
+    """Pravi rekurzivno zatvorenje za jedan `solve()` poziv.
 
-    limit = required_rooms if required_rooms is not None else MAX_ROOMS
-    if rooms_used >= limit:
-        return _Result(_UNSOLVABLE, [])
+    `room_types`/`age_classes`/`nights`/`required_rooms` su konstantni kroz ceo
+    poziv (isto važilo i za `memo` ranije) — hvatanjem u zatvorenje rekurzija
+    prosleđuje samo (adults, counts, rooms_used) umesto osam imenovanih
+    argumenata pri svakom od desetina hiljada poziva. Bez efekta na rezultat,
+    samo manje CPython poziv-režije (poruka 14, izmena 1).
+    """
+    memo: dict[tuple[int, tuple[int, ...], int], _Result] = {}
 
-    # NAMERNO ne uključuje required_rooms u ključ (isto kao Kotlin StateKey) —
-    # ispravno je SAMO zato što je required_rooms konstantan kroz ceo poziv
-    # solve() (jedan memo po pozivu). Ne deliti memo između poziva sa različitim
-    # party.rooms, i ne menjati ovu strukturu bez ponovnog razmatranja te pretpostavke.
-    key = (adults, counts, rooms_used)
-    cached = memo.get(key)
-    if cached is not None:
-        return cached
+    # `_room_cost(room_type, adults, child_ages, nights)` zavisi samo od
+    # (kod sobe, broj odraslih, MULTISKUP uzrasta dece — redosled ne menja
+    # cenu, `_room_cost` i sam sortira po `_child_key`) jer je `nights` ovde
+    # konstantno. Izmereno (poruka 14): 305 jedinstvenih ključeva od 34.382
+    # poziva u najgorem slučaju, ~99% računanja je bilo ponavljanje iste
+    # kombinacije. Keš je po pozivu `solve()` (fresh dict), isti obrazac
+    # skupljanja kao `memo` iznad (izmena 3).
+    room_cost_cache: dict[tuple[str, int, tuple[int, ...]], Decimal | None] = {}
 
-    best_cost = _UNSOLVABLE
-    best_rooms: list[RoomAssignment] = []
+    def cost_of(room_type: _RoomType, adults: int, child_ages: list[int]) -> Decimal | None:
+        key = (room_type.code, adults, tuple(sorted(child_ages)))
+        if key in room_cost_cache:
+            return room_cost_cache[key]
+        cost = _room_cost(room_type, adults, child_ages, nights)
+        room_cost_cache[key] = cost
+        return cost
 
-    for room_type in room_types:
-        max_adults_here = min(adults, room_type.capacity_total)
-        for take_adults in range(1, max_adults_here + 1):
-            free_slots = room_type.capacity_total - take_adults
-            for combo in _for_each_child_combination(counts, free_slots):
-                ages: list[int] = []
-                for i, take in enumerate(combo):
-                    ages.extend([age_classes[i]] * take)
+    def best(adults: int, counts: tuple[int, ...], rooms_used: int) -> _Result:
+        if adults == 0 and sum(counts) == 0:
+            if required_rooms is None or rooms_used == required_rooms:
+                return _Result(Decimal(0), [])
+            return _Result(_UNSOLVABLE, [])
 
-                cost = _room_cost(room_type, take_adults, ages, nights)
-                if cost is not None:
-                    remaining = tuple(counts[i] - combo[i] for i in range(len(counts)))
-                    sub = _best(
-                        room_types=room_types,
-                        age_classes=age_classes,
-                        nights=nights,
-                        required_rooms=required_rooms,
-                        adults=adults - take_adults,
-                        counts=remaining,
-                        rooms_used=rooms_used + 1,
-                        memo=memo,
-                    )
-                    if sub.cost < _UNSOLVABLE:
-                        total = cost + sub.cost
-                        if total < best_cost:
-                            best_cost = total
-                            best_rooms = [
-                                RoomAssignment(
-                                    room_code=room_type.code,
-                                    room_name=room_type.name,
-                                    adults=take_adults,
-                                    child_ages=tuple(ages),
-                                    # Zaokruženo OVDE, po sobi — total iznad ostaje
-                                    # nezaokružen kroz rekurziju. Zbir cena po sobama
-                                    # zato ne mora biti jednak ukupnoj ceni. Nije bug,
-                                    # zatečeno ponašanje iz Kotlina, preneto doslovno.
-                                    amount=cost.quantize(_CENTS, rounding=ROUND_HALF_UP),
-                                ),
-                                *sub.rooms,
-                            ]
+        limit = required_rooms if required_rooms is not None else MAX_ROOMS
+        if rooms_used >= limit:
+            return _Result(_UNSOLVABLE, [])
 
-    result = _Result(best_cost, best_rooms)
-    memo[key] = result
-    return result
+        # NAMERNO ne uključuje required_rooms u ključ (isto kao Kotlin StateKey) —
+        # ispravno je SAMO zato što je required_rooms konstantan kroz ceo poziv
+        # solve() (jedan memo po pozivu, jedno zatvorenje po pozivu). Ne deliti
+        # memo između poziva sa različitim party.rooms.
+        key = (adults, counts, rooms_used)
+        cached = memo.get(key)
+        if cached is not None:
+            return cached
+
+        best_cost = _UNSOLVABLE
+        best_rooms: list[RoomAssignment] = []
+
+        for room_type in room_types:
+            max_adults_here = min(adults, room_type.capacity_total)
+            for take_adults in range(1, max_adults_here + 1):
+                free_slots = room_type.capacity_total - take_adults
+                for combo in _child_combinations(counts, free_slots):
+                    ages: list[int] = []
+                    for i, take in enumerate(combo):
+                        ages.extend([age_classes[i]] * take)
+
+                    cost = cost_of(room_type, take_adults, ages)
+                    if cost is not None:
+                        remaining = tuple(counts[i] - combo[i] for i in range(len(counts)))
+                        sub = best(adults - take_adults, remaining, rooms_used + 1)
+                        if sub.cost < _UNSOLVABLE:
+                            total = cost + sub.cost
+                            if total < best_cost:
+                                best_cost = total
+                                best_rooms = [
+                                    RoomAssignment(
+                                        room_code=room_type.code,
+                                        room_name=room_type.name,
+                                        adults=take_adults,
+                                        child_ages=tuple(ages),
+                                        # Zaokruženo OVDE, po sobi — total iznad ostaje
+                                        # nezaokružen kroz rekurziju. Zbir cena po sobama
+                                        # zato ne mora biti jednak ukupnoj ceni. Nije bug,
+                                        # zatečeno ponašanje iz Kotlina, preneto doslovno.
+                                        amount=cost.quantize(_CENTS, rounding=ROUND_HALF_UP),
+                                    ),
+                                    *sub.rooms,
+                                ]
+
+        result = _Result(best_cost, best_rooms)
+        memo[key] = result
+        return result
+
+    return best
