@@ -43,8 +43,12 @@ class IngestClient:
 
     def start_run(self, source_slug: str) -> int:
         """Otvara novu crawl runu. Vraca run_id."""
-        resp = self._post("/internal/runs", {"sourceSlug": source_slug})
-        run_id: int = resp["runId"]
+        # snake_case (ADR 0002: /internal/* je snake_case). Ranije je ovde stajalo
+        # rucno pisano camelCase ("sourceSlug"/"runId") jer je poklapalo STARI Kotlin
+        # API pre ADR 0002 ispravke; nikad azurirano kad je odluka promenjena, i nikad
+        # provereno end-to-end dok nije napisan pravi ugovorni test (CLAUDE.md §7/§9).
+        resp = self._post("/internal/runs", {"source_slug": source_slug})
+        run_id: int = resp["run_id"]
         log.info("Runa #%d otvorena za %s", run_id, source_slug)
         return run_id
 

@@ -114,3 +114,17 @@ class CrawlStatus(StrEnum):
     SUSPECT = "SUSPECT"      # sumnjivo malo rezultata; ingest se odbija
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+
+
+class SourceHealth(StrEnum):
+    OK = "OK"
+    DEGRADED = "DEGRADED"
+    FAILING = "FAILING"
+    DISABLED = "DISABLED"
+    UNKNOWN = "UNKNOWN"
+
+
+class AliasStatus(StrEnum):
+    CONFIRMED = "CONFIRMED"
+    PENDING = "PENDING"
+    REJECTED = "REJECTED"

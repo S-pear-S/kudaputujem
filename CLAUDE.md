@@ -4,24 +4,17 @@
 > Ako nešto u kodu protivreči ovom fajlu, prvo pitaj — ne pretpostavljaj da je fajl zastareo.
 > Kad doneseš novu odluku ili završiš veću stavku, **ažuriraj ovaj fajl u istom commit-u**.
 
-Poslednje ažuriranje: 31.08.2026. (**Poruka 15 — korisnik rekao "kreni", tri izmene urađene ovim
-redom, merenje posle svake (izolovano, ponovljeno posle prvog prolaza koji je slučajno spojio
-izmene 1+2 pre prvog merenja):** (1) `_best` postao zatvorenje `_make_best`/`best` unutar
-`solve()`, rekurzija sa (adults, counts, rooms_used) umesto 8 imenovanih argumenata — **BEZ
-merljive promene brzine u izolaciji** (~204ms i pre i posle), zadržano zbog čistijeg koda, ne
-brzine. (2) `_for_each_child_combination`/`_recurse` (rekurzivni generator) → `_child_combinations`
-(`itertools.product` + filter po zbiru, `@functools.cache`) — **~204ms → ~163ms**. (3) `_room_cost`
-keširan po pozivu `solve()`, ključ (room_code, adults, sorted(child_ages)) — **~163ms → ~90ms**
-(305 stvarnih izračunavanja od 34.382 poziva, kako je izmereno u poruci 14). **Ukupno ~204ms →
-~90ms (2.3× brže), CILJ OD <50ms NIJE DOSTIGNUT** — po instrukciji ("ako i dalje ne stigne, stani
-i javi") NIJE nastavljeno na četvrtu izmenu. Preostalo: `best()` sam nosi 63% preostalog vremena
-pod profajlerom — čista režija Python poziva/petlje kroz 27.575 poziva, ne aritmetika koja bi se
-keširala. Dalje smanjenje traži promenu REDOSLEDA pretrage (npr. grupisanje identičnih tipova
-soba, ranije odsecanje grana), što je korisnik eksplicitno odvojio kao poseban razgovor i poseban
-rizik. Pun spisak, tabela pre/posle po izmeni, u §9. **25/25 testova zeleno, nijedan promenjen,
-194 ukupno, `ruff`/`mypy --strict`/`lint-imports` čisti. Kod: `apps/api/src/travelapi/pricing/
-occupancy.py`. Čeka korisnikovu odluku o sledećem koraku** — ne kreće se samostalno na promenu
-redosleda pretrage.
+Poslednje ažuriranje: 31.08.2026. (**Poruka 16 — korisnik prihvatio ~90ms, ADR 0001 korak 3
+ZATVOREN U CELINI. Promena redosleda pretrage (grupisanje identičnih tipova soba, ranije
+odsecanje grana) je SVESNO ODBIJENA** — nosi rizik da se tiho promeni koja cena je "najbolja"
+(tačna, ali pogrešno rangirana kombinacija soba), a tipičan slučaj koji korisnici stvarno
+pogađaju je već ~0.14ms po pozivu (`minimum_for_adults`, 8 tipova soba) — daleko ispod bilo kog
+razumnog praga. Konačna tabela i zaključak u §9 (poruka 15/16 red). **ADR 0001 korak 4 počeo,
+sa CILJEM PROMENJENIM od strane korisnika**: ne "ceo API modul po modulu", nego JEDNA PRAVA
+runda od kraja do kraja — soleazur skrepuje, ingest upiše, u bazi stoje prave ponude. `search`
+se NE piše u ovom prolazu (334 linije SQL-a nad praznom tabelom su papir). Prva prepreka koju
+niko do sada nije video: migracije nemaju nijedan red u `agency`/`source`, `findSource` diže
+`source_not_found` za oba gotova adaptera — vidi §7 korak 4 za V3 migraciju i status.
 Usput, nezavisno od optimizacije (poruka 12, odeljak "Oktopod: ovo nije bug, nego nešto gore"):
 dva upisa objašnjenja (`oktopod.py` iznad linije 402 sad ima komentar, plus `docs/recon/oktopod.md`)
 o tome da `capacity_adults=4/capacity_extra=0` za oktopod NIJE stvarni kapacitet po ležajevima
@@ -457,7 +450,7 @@ svaki se završava zelenim `pytest`-om, Kotlin se briše poslednji.
 | **Jedan `.venv` u korenu** | `apps/scrapers/.venv` i `apps/api/.venv` spojeni u `D:\Kiki\kudaputujem\.venv`, sva tri paketa (`travelcore`, `travelscrape`, `travelapi`) instalirana `-e` u njega | ✓ **commit `18d70cf`** — `pytest.ini` u korenu, `pytest`/`ruff`/`mypy`/`lint-imports` isti rezultati kao pre premeštanja |
 | **2, C3** | `postgres_data` volumen od 15.08 se briše, prava baza se pravi iznova ISKLJUČIVO kroz `alembic`, prava lozinka u `.env` | ✓ **GOTOVO 19.08.2026** — korisnik tražio rezervnu kopiju PRE brisanja (`docker volume rm` prvo blokiran auto-mode klasifikatorom kao destruktivna radnja, korisnik eksplicitno potvrdio). Backup 129KB/2727 linija (van repoa), potvrđeno da nema podataka van geo seed-a (samo `destination`=323, `destination_alias`=541, svih ostalih 17 tabela = 0). Volumen obrisan, baza nastala isključivo kroz `alembic upgrade head`. **164 testa prolaze, 0 preskočeno** (153 + `test_fetch.py` + prošireni karakterizacioni testovi od poruke 5/6). `ref`/`mig` baze nestale zajedno sa obrisanim volumenom (živele su u istom Postgres instance-u) — ništa dodatno za čišćenje |
 | **3** | `OccupancySolverTest.kt` → `tests/test_occupancy.py` (svi crveni), pa `pricing/occupancy.py` dok ne pozelene | ⏳ **SLEDEĆI KORAK** — čeka korisnikovo "kreni" |
-| **4** | Ostatak API-ja modul po modulu: `errors` → `db` → `geo` → `accommodation` → `ingest` → `pricing/price_index` → `search`, sa testovima uz svaki. Tu ide i treći `import-linter` kontrakt: `travelapi` ne sme da uvozi `travelscrape` | ne početo — `apps/api/src/travelapi/__init__.py` postoji, prazan placeholder |
+| **4** | **CILJ PROMENJEN (poruka 16, 31.08.2026): jedna prava runda od kraja do kraja, ne ceo API.** `errors` → `db` → `geo` → `accommodation` → `ingest`/`OfferWriter`. `search`/`pricing/price_index` se NE pišu u ovom prolazu (nema pravih ponuda u bazi dok ingest ne proradi) | `errors`/`db`/crawl servis + `V3` migracija (agency/source seed) **GOTOVI**, treći `import-linter` kontrakt dodat i zelen — vidi §7 korak 4, §9. **Resolveri i ingest/OfferWriter SLEDEĆI, nisu počeli** — stalo posle crawl servisa po instrukciji ("javi kad errors, db i crawl budu gotovi, pre resolvera") |
 | **5** | E2E provera: `soleazur` skreper → `POST /internal/ingest` → baza → `GET /search` vraća tu ponudu, bez izmene `IngestClient`-a | ne početo |
 | **6** | Brisanje `apps/api/src/main/kotlin`, `src/test/kotlin`, `build.gradle.kts`, `settings.gradle.kts`, `gradle/`, `gradlew*`, JVM `Dockerfile`, čišćenje `docker-compose.yml` | **ne dirati pre koraka 5** |
 | **7** | VS Code config (`.vscode/`), uklanjanje pominjanja IntelliJ/Gradle iz `README.md`/`CLAUDE.md` | ne početo |
@@ -668,12 +661,49 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
      otkriva bag (da je pukao, to bi bio pravi nalaz — nije). Objašnjenje "zašto" upisano u
      `oktopod.py` iznad linije 402 (komentar) i `docs/recon/oktopod.md`. Vidi §7 Faza B za
      odluku koja i dalje čeka vlasnika — tri kapacitetne kolone sa tri nedorečena značenja.
-4. **Korak 4: Ostatak API-ja**, modul po modul: `errors` → `db` → `geo` → `accommodation` →
-   `ingest` → `pricing/price_index` → `search`. Svaki modul nosi svoje testove. `numeric` iz
-   Postgresa mora stizati kao `Decimal` (psycopg 3), nikad `float`.
+   - **3d nastavak, poruka 15/16 (31.08.2026): tri optimizacije, ~204ms → ~90ms (2.3×). Cilj
+     <50ms NIJE dostignut, korisnik prihvatio ~90ms i SVESNO ODBIO promenu redosleda pretrage**
+     (rizik tihe promene koje rešenje se proglašava najjeftinim, ne samo brzine) — tipičan
+     slučaj (~0.14ms) je ono što korisnici stvarno pogađaju. **ADR 0001 korak 3 ZATVOREN U
+     CELINI.** Puna tabela i obrazloženje u §9, poslednji red.
+4. **Korak 4: jedna prava runda od kraja do kraja (CILJ PROMENJEN od korisnika, poruka 16,
+   31.08.2026)** — ne "ceo API modul po modulu" kako je ranije planirano, nego: soleazur
+   skrepuje → ingest upisuje → u bazi stoje prave ponude. `search` se **ne piše u ovom prolazu**
+   (334 linije SQL-a nad praznom tabelom su papir — piše se tek kad u bazi budu prave ponude).
+   Redosled: `errors` → `db` (psycopg 3 pool) → crawl servis (otvaranje/zatvaranje runde) →
+   `geo`/`accommodation` resolveri → `ingest`/`OfferWriter` + ugovorni test iz ADR-a 0002 sa
+   pravim `OfferIn` kroz pravi endpoint. `numeric` iz Postgresa mora stizati kao `Decimal`
+   (psycopg 3), nikad `float`.
+   - **Prva prepreka, niko je do sada nije video (poruka 16):** migracije (`V1`/`V2`) ne
+     ubacuju nijedan red u `agency`/`source`. `findSource`/`find_source` diže `source_not_found`
+     za OBA gotova adaptera (soleazur, oktopod) — nijedan ne može ni da otvori rundu. Rešeno
+     migracijom `V3` (nova, `V1` se ne dira — pravilo 4), koja upisuje dve agencije i dva izvora
+     (`soleazur-grcka`, `oktopod-grcka`) sa `slug` koji se poklapa sa adapterovim `source_slug`
+     ClassVar-om — provereno kroz `registry.py`/adapter fajlove, ne prepisano naslepo. Vidi §9.
    - **Format na žici (ADR 0002, docs/decisions/0002-format-na-zici.md):** `/internal/*` prima
-     **snake_case** (isto što skreper šalje danas — `core/ingest.py` se NE dira), `/api/*` vraća
-     **camelCase** (frontend `lib/types.ts` već tako čita).
+     **snake_case**, `/api/*` vraća **camelCase** (frontend `lib/types.ts` već tako čita).
+     **Ispravka pri pisanju koraka 4 (poruka 16):** `core/ingest.py` NIJE u celini već bilo
+     snake_case kako je ADR 0002 tvrdio da jeste — `IngestClient.start_run` je ručno slao
+     `{"sourceSlug": ...}` i čitao `resp["runId"]`, camelCase, ostatak Kotlin API-ja od pre ADR
+     0002 ispravke. `send_batch`/`finish_run` su već ispravno snake_case (`model_dump()`).
+     Ispravljeno na snake_case (`source_slug`/`run_id`) da bude dosledno ostatku ugovora —
+     ovo NIJE nova arhitektonska odluka, nego dovršetak ADR 0002 odluke koja je već doneta ali
+     nedosledno primenjena. Vidi §9.
+   - **`errors`/`db`/crawl servis GOTOVI (31.08.2026), PRE resolvera — po instrukciji, javljeno
+     korisniku i stalo tu.** Novi paket `apps/api/src/travelapi/`: `config.py` (Settings,
+     `DATABASE_URL` sa istim dev-podrazumevanim obrascem kao `.env.example`), `errors.py`
+     (`ApiError` hijerarhija + FastAPI exception handleri, prevod `Errors.kt`), `db.py`
+     (`psycopg_pool.ConnectionPool`, lenji singleton — vidi §9 za dokaz da je `pool.connection()`
+     već tačno jedna transakcija, pročitano iz `psycopg_pool` izvora pre nego što se iko na to
+     osloni), `common/from_db.py` (Odluka B, generički helper), `crawl/{models,service,router}.py`
+     (prevod `CrawlRunService.kt`/`IngestController.kt` start/finish delova), `app.py` (FastAPI
+     app + `ApiKeyMiddleware`, prevod `ApiKeyFilter.kt`, `hmac.compare_digest`). `SourceHealth`/
+     `AliasStatus` dodati u `travelcore.enums` (nedostajali, §7 nalaz iz poruke 9). Treći
+     `import-linter` kontrakt dodat (`travelapi ne sme da uvozi travelscrape`, `.importlinter`).
+     **9 novih testova** (`test_content_hash.py`, `test_from_db.py`, `test_crawl.py` — pravi HTTP
+     kroz `TestClient`, prava baza, ne mock), **203 ukupno (18 preskočeno bez `DATABASE_URL`)**,
+     `ruff`/`mypy --strict`/`lint-imports` čisti. Detalji u §9. **Javljeno korisniku, čeka se
+     "kreni" pre resolvera** — po instrukciji, ne nastavlja se samostalno.
    - **Obavezan ugovorni test, deo ovog koraka, ne opciono:** pravi `OfferIn` sa punim sadržajem
      mora proći kroz pravi `POST /internal/ingest/offers` i stići u bazu nepromenjen. Ne mock,
      ne poređenje šema — pravi HTTP zahtev, prava baza. Dosad ovaj lanac **nikad nije proveren
@@ -1060,7 +1090,22 @@ pretrage (npr. grupisanje identičnih tipova soba, ranije odsecanje grana, druga
 stanja), što je korisnik eksplicitno označio kao poseban razgovor i poseban rizik, ne nastavak
 ove tri izmene. Kod: `apps/api/src/travelapi/pricing/occupancy.py`. **25/25 testova u
 `test_occupancy.py` zeleno, nijedan promenjen, 194 ukupno (13 preskočeno bez `DATABASE_URL`),
-`ruff`/`mypy --strict`/`lint-imports` čisti.** Čeka korisnikovu odluku o sledećem koraku. |
+`ruff`/`mypy --strict`/`lint-imports` čisti.** |
+| **Poruka 16 (31.08.2026) — KONAČNA ODLUKA korisnika: prihvata se ~90ms, ADR 0001 korak 3
+ZATVOREN.** Konačna tabela (ponovljena iz poruke 15, ovde kao trajni zaključak): polazno ~204ms
+→ izmena 1 (zatvorenje) ~204ms bez efekta → izmena 2 (`_child_combinations`) ~163ms → izmena 3
+(`_room_cost` keš) ~90ms. **Cilj <50ms nije dostignut.** Promena REDOSLEDA pretrage (grupisanje
+identičnih tipova soba, ranije odsecanje grana — jedini preostali put do <50ms, vidi red iznad)
+je **svesno odbijena, ne odložena**: nosi rizik da tiho promeni KOJA kombinacija soba/dece se
+proglašava najjeftinom (ne visinu cene, nego REDOSLED u kom se stanja razmatraju i koje se prvo
+zabeleži kao rešenje kad postoji vezan rezultat ili blizu-vezan rezultat) — greška te vrste ne
+baca izuzetak i ne pada test dok se neko ne pожali da je cena na sajtu niža nego što solver kaže.
+Razlog da je ovo prihvatljivo: **tipičan slučaj (ono što korisnici stvarno pogađaju — mala do
+srednja grupa, par tipova soba) je već ~0.14ms** (`minimum_for_adults`, 8 tipova soba, poruka 15
+tabela) — tri reda veličine ispod bilo kog razumnog praga. Repni slučaj (~90ms, 8 odraslih+4
+dece+8 tipova soba) je redak na stranici od 20 rezultata i cena tog reda ne blokira korisnika.
+**ADR 0001 korak 3 zatvoren u celini** — 25/25 testova, `ruff`/`mypy --strict`/`lint-imports`
+čisti, kod nepromenjen od poruke 15. Sledeći rad ide na ADR 0001 korak 4, vidi §7. |
 | `raw_document` će brzo rasti | srednja | brisati starije od 30 dana, particionisati po mesecu preko 50 GB |
 | Nema CI | srednja | testovi se za sada pokreću ručno; CI plan je §7 stavka 19, čeka da se Kotlin sklone iz matrice |
 | Fixture je skraćen na 2 od 10 sekcija (soleazur) | niska | pokriva sve strukturne slučajeve; puna stranica ima 84 reda |
@@ -1077,6 +1122,11 @@ ove tri izmene. Kod: `apps/api/src/travelapi/pricing/occupancy.py`. **25/25 test
 | **Poznat, NAMERNO neispravljen bug u `OccupancySolver`: rangiranje dece za pomoćni ležaj ne prati stvarnu naplatu** | srednja, dokumentovan, **ne popravljati bez razgovora** | Preneto doslovno iz `OccupancySolver.kt` u `occupancy.py` (`_room_cost`, komentar uz `_child_key`). Deca se biraju za pomoćni ležaj po `child_price` (ili `adult_price` kao rezervi ako nema dečje cene), ali se naplaćuju po `extra_bed_price`. Kad je `extra_bed_price < adult_price`, pohlepan izbor po `child_price` nije nužno optimalan po stvarnoj naplati — moguće je da bi drugačiji raspored dece dao nižu ukupnu cenu. Nijedan od 17 postojećih testova ovo ne pokriva (svi imaju `extra_bed_price >= adult_price` u fixture-ima). Popravka je planirana za **poseban commit posle koraka 3c** (ADR 0001 korak 3, `porukazaclaudecode8.md`), namerno odvojena od porta jer bi promenila očekivane brojeve. |
 | Sedam zamki iz Kotlina, prenete doslovno u `occupancy.py` — pregled | informativno | (1) `UNSOLVABLE` sentinela `Decimal("999999999")` sa `>=`, ne `None`/`math.inf`. (2) **Nula** mesta sa `BigDecimal ==` u `OccupancySolver.kt` (sva poređenja su `<`/`<=`/`>`/`>=`) — Python `Decimal` prirodno odgovara Kotlinovom `compareTo`, nikakav `quantize`/tuple obilazak nije trebao. (3) Dvostruko zaokruživanje: po sobi odmah (`quantize` u `_best`), ukupno tek na kraju u `solve()` — zbir cena po sobama zato ne mora biti jednak ukupnoj ceni, komentarisano u kodu. (4) Bug u rangiranju dece — vidi red iznad, NIJE popravljen. (5) `Party.__post_init__` baca `ValueError`, `minimum_for_adults` ga hvata (`except ValueError`). (6) `child_price` uzima minimum po svim poklapajućim opsezima, opseg bez granica podrazumevano `0..11`, ne "bez ograničenja". (7) Memo ključ `(adults, counts, rooms_used)` namerno NE sadrži `required_rooms` — ispravno samo dok je `required_rooms` konstantan kroz jedan `solve()` poziv (i jeste, svež `memo` dict po pozivu), komentarisano u kodu da se ta pretpostavka ne naruši slučajno. |
 | `Solution.per_person()` zaokružuje u DVA koraka, Kotlin u JEDNOM — poznato, pokriveno testom, kod NIJE menjan | niska, informativno | Nalaz 3 (poruka 9). Kotlin `total.divide(BigDecimal(partySize), 2, HALF_UP)` je jedan korak. Python `(total / Decimal(party_size)).quantize(_CENTS, HALF_UP)` je deljenje na 28 značajnih cifara (podrazumevana `decimal` preciznost), pa tek onda zaokruživanje — dva koraka. Za iznose koje projekat stvarno ima razlika je praktično nemoguća ali nije bila dokazano nemoguća, i jedini postojeći test (`897/3=299.00`) ne bi je uhvatio jer deljenje izlazi tačno. Dodata dva testa direktno na `Solution` (bez solvera, da se izoluje samo zaokruživanje): `100.00/3` (treća decimala 3, NADOLE → `33.33`) i `100.00/7` (treća decimala 5, NAGORE → `14.29`) — vrednosti ručno izračunate po HALF_UP pravilu. **Oba prolaze sa postojećom implementacijom** — razlika između dva koraka i jednog se ne materijalizuje za ove vrednosti. Kod ostaje nepromenjen (uputstvo: ne diraj bez razloga kad test prođe). |
+| **Migracije nisu punile `agency`/`source` — ADR 0001 korak 4, poruka 16, 31.08.2026** | ✓ rešeno | `V1`/`V2` su punile samo geo seed; `agency`/`source` su ostale prazne otkad šema postoji. `findSource`/`find_source` diže `source_not_found` za bilo koji slug, pa ni soleazur ni oktopod nisu mogli da otvore rundu — nijedna dosadašnja provera ovo ne bi uhvatila (unit testovi solvera/adaptera ne dodiruju `crawl_run`/`source`). Rešeno `V3__seed_sources.sql` (nova migracija, `V1` se ne dira — pravilo 4): dve agencije, dva izvora. `source.slug` provereno JEDNAK adapterovom `source_slug` ClassVar-u čitanjem `soleazur.py:467`/`oktopod.py:479`, ne pretpostavljeno — `registry.get(source_slug)` i `IngestClient.start_run(source_slug)` oba koriste taj isti string, pa netačan `source.slug` bi tiho pravio dva izvora koja se nikad ne poklapaju sa onim što skreper šalje. |
+| **`core/ingest.py` `start_run` je slao/čitao camelCase (`sourceSlug`/`runId`), suprotno ADR 0002 odluci da je `/internal/*` snake_case** | ✓ rešeno | Otkriveno čitanjem `core/ingest.py` pre pisanja `crawl/router.py` (ne pretpostavljeno da je već ispravno jer CLAUDE.md §4.2 kaže "IngestClient se ne menja"). `send_batch`/`finish_run` su već koristili `model_dump()` (snake_case) — samo je `start_run` ostao na starom hardkodovanom camelCase iz PRE ADR 0002 ispravke, nikad ažuriran. Da nije ispravljeno, `StartRunRequest` (pydantic, `source_slug: str`) bi odbio telo `{"sourceSlug": ...}` sa 422, a `resp["run_id"]` bi bacio `KeyError` na strani skrepera. Ispravljeno na `{"source_slug": ...}`/`resp["run_id"]` — ovo NIJE nova arhitektonska odluka, dovršava već doneto ADR 0002. Nijedan postojeći test nije pinovao stari ugovor (provereno grep-om pre izmene). |
+| **`psycopg_pool.ConnectionPool.connection()` transakciona semantika — pročitano iz izvora pre oslanjanja** | informativno, potvrđeno | `pool.py:184-190`: `connection()` radi `with conn:` (`Connection.__exit__`), što COMMIT-uje pri čistom izlasku i ROLLBACK-uje pri izuzetku. Znači `with pool.connection() as conn:` je već tačno jedna transakcija bez dodatnog `conn.transaction()` omotača — `db.transaction()` je samo čitljivo ime za isto. Ovo je bitno za "transakcija po ponudi" zahtev (ADR 0001 korak 4, ingest deo, sledeći na redu): jedan `with db.transaction():` blok po ponudi u petlji znači da loša ponuda rollback-uje SAMO svoju transakciju, prethodno komitovane ponude ostaju upisane — isto ponašanje kao Kotlin `@Transactional fun write(offer: OfferIn, ...)`. |
+| `content_hash()` stabilnost preko procesa — provereno PRE pisanja `OfferWriter`-a, po instrukciji | ✓ potvrđeno, test zeleno | `test_content_hash.py` gradi `OfferIn` sa `raw_attributes` namerno izgrađenim iteracijom preko `set`-a (hash-seed-zavisan poredak), serijalizuje u tri ODVOJENA procesa (`PYTHONHASHSEED=1`, `=2`, nasumičan) i poredi heš — **identičan u sva tri**. Potvrđuje da `json.dumps(sort_keys=True)` sortira REKURZIVNO na svakom nivou ugnježdenog dict-a, pa dict polja ne kvare stabilnost heša između pokretanja skrepera (svako pokretanje je nov proces, CPython nasumično bira `PYTHONHASHSEED` po difoltu). Test NAMERNO ne pokriva slučaj gde bi LISTA (ne dict) bila izgrađena iz iteracije seta — `sort_keys` ne sortira sadržaj lista, a nijedan trenutni adapter (soleazur/oktopod, provereno grep-om) ne gradi liste na taj način, samo `.append()` u redosledu dokumenta. Da neki budući adapter to uradi, `content_hash()` bi tiho postao nestabilan preko procesa — vredi imati na umu pri pisanju novih adaptera. |
+| `SourceHealth`/`AliasStatus` dodati u `travelcore.enums` (ADR 0001 korak 4) | informativno | Nedostajali su otkad je popisano u poruci 8/9 (§7 korak 4, "Sistemski nedostatak"). Potrebni za `crawl/service.py` (`SourceHealth` za `source.health_status`) i biće potrebni za `geo`/`accommodation` resolvere (`AliasStatus` za `destination_alias.status`/`accommodation_alias.status`) u sledećem delu. `DestinationKind`/`LeadStatus` i dalje nedostaju — nisu trebali za errors/db/crawl, dodaju se kad zatreba (geo resolver ne čita `destination.kind`). |
 
 ---
 
@@ -1104,23 +1154,29 @@ pip install -e "apps/scrapers[dev]"
 pip install -e "apps/api[dev]"
 
 # pytest iz korena — pokuplja apps/scrapers/tests I apps/api/tests (pytest.ini u korenu)
-pytest                        # bez DATABASE_URL: 151 prolazi, 13 preskočeno (test_sql_parity.py)
+pytest                        # bez DATABASE_URL: 185 prolazi, 18 preskočeno (test_sql_parity.py + test_crawl.py)
 set DATABASE_URL=postgresql://kudaputujem:<lozinka-iz-.env>@localhost:5432/kudaputujem
-pytest                        # sa bazom: 164 testa, 0 preskočeno (stanje 19.08.2026, raste sa svakim korakom)
+pytest                        # sa bazom: 203 testa, 0 preskočeno (stanje 31.08.2026, raste sa svakim korakom)
 
 # lint/tipovi — i dalje per-paket (svaki ima svoj ruff/mypy config u svom pyproject.toml)
 (cd apps/scrapers && ruff check .)                                          # očekivano: čisto
 (cd apps/api && ruff check migrations src/travelapi)                        # očekivano: čisto (gen_geo_seed.py ima 6 pred-postojecih nalaza, §9, ne diraj uz migracioni posao)
 python -m mypy --strict packages/travelcore/src/travelcore apps/scrapers/src/travelscrape   # očekivano: čisto
-python -m mypy --strict apps/api/migrations apps/api/src/travelapi                          # očekivano: čisto
+python -m mypy --strict packages/travelcore/src/travelcore apps/api/migrations apps/api/src/travelapi apps/api/tests   # očekivano: čisto (travelcore MORA biti u istom pozivu, nema py.typed marker)
 
-# provera granice travelcore/travelscrape (pravilo 17)
-lint-imports    # pokreni iz root-a repoa, čita .importlinter; očekivano "2 kept, 0 broken"
+# provera granice travelcore/travelscrape/travelapi (pravilo 17)
+lint-imports    # pokreni iz root-a repoa, čita .importlinter; očekivano "3 kept, 0 broken"
+
+# FastAPI (ADR 0001 korak 4, deo gotov: errors/db/crawl, čeka resolvere+ingest)
+cd apps/api
+set DATABASE_URL=postgresql://kudaputujem:<lozinka-iz-.env>@localhost:5432/kudaputujem
+uvicorn travelapi.app:app --reload --port 8080
+cd ..
 
 # alembic — jedina staza do razvojne baze od 19.08.2026, Flyway se više NE koristi za nju
 cd apps/api
 set DATABASE_URL=postgresql://kudaputujem:<lozinka-iz-.env>@localhost:5432/kudaputujem
-alembic upgrade head          # primenjuje 0001 (V1) pa 0002 (V2), jedna transakcija za oba
+alembic upgrade head          # primenjuje 0001 (V1), 0002 (V2), 0003 (V3 — agency/source seed)
 alembic downgrade -1          # namerno diže NotImplementedError, ne dira bazu (pravilo o jednosmernim migracijama)
 cd ..
 
@@ -1284,3 +1340,8 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | **26.08.2026** | **Poruka 12, "Oktopod: ovo nije bug, nego nešto gore" — urađeno sve troje.** (1) Komentar u `oktopod.py` iznad linije 402 i pasus u `docs/recon/oktopod.md`, oba objašnjavaju da `capacity_adults` za oktopod nosi "koliko se naplaćuje" (oktopodov model), ne "koliko staje u osnovne ležaje" (solverovo očekivanje) — poklapaju se slučajno. (2) `price_option.capacity_total` nalaz (poruka 11) i ovaj nalaz spojeni u JEDNU stavku u §7 Faza B — tri kapacitetne kolone, tri nedorečena značenja, jedna odluka. (3) Prvi integracioni test koji spaja parser i solver: `test_oktopod_solver_integration.py` — pravi `1/3+1 STD` (200 EUR, "Broj plativih osoba"=4) kroz `parse_hotel_page()` pa kroz `OccupancySolver.solve()` za 4 odrasla, tvrdnja `4×200=800.00` **PROLAZI** (da je pukla, to bi bio pravi nalaz — ovako potvrđuje slučajnu tačnost). 194 testa ukupno (bilo 193, +1), `ruff`/`mypy --strict` čisti |
 | **31.08.2026** | **Poruka 14 — tri nedostajuće stavke iz izveštaja uz poruku 12, obrađene.** (1) Instrukcija 13 (`.gitattributes`/CRLF) potvrđena urađena — `git log` pokazuje commit `940215a`, samo nije bila ponovljena u tekstualnom izveštaju. (2) `minimum_for_adults(1..8)` ponovo izmereno STVARNIM pokretanjem skripte (raniji "peto merenje" u `6a956f7` je bio samo tekst u `CLAUDE.md`, bez ijedne propratne skripte/fajla u repou — nije se mogao naći trag izvršavanja): 8.657 ms zbir, 0.12h na 50.000 termina, isti zaključak (nije problem). (3) `cProfile` ponovljen (drugačiji sintetički fixture, scratch skripta van repoa) — potvrđuje raspodelu iz poruke 12 (`_best` tottime 32%, `_recurse` 22%, `_room_cost` 12–13%). (4) Prebrojani jedinstveni ključevi za predloženi `_room_cost` keš `(room_code, adults, sorted(child_ages), nights)`: **305** od 34.382 poziva — deo predviđanja o broju ključeva je tačan. **Ali predviđeni pad 280ms→~10ms se NE potvrđuje**: predviđanje je pretpostavilo da SAV trošak upada u `_room_cost` (280ms/30.133 poziva ≈ 9µs), a profajler (i stari i novi) pokazuje da `_best`/`_recurse` sopstveni rekurzivni overhead nosi veći deo troška nego `_room_cost` sam. Po sopstvenom uslovu iz poruke 14 ("ne braniti pretpostavku ako profajler kaže drugačije") — prijavljeno umesto potvrđeno bez provere. Keširanje `_room_cost` ostaje verovatno korisna prva izmena (~25–30%, ne 30×), `_best`/`_recurse` overhead ostaje sledeći kandidat. Kod NIJE menjan, čeka "kreni" |
 | **31.08.2026** | **Poruka 15 — korisnik rekao "kreni", tri izmene urađene ovim redom, mereno posle svake izolovano.** Izmena 1: `_best` → `_make_best`/`best` zatvorenje unutar `solve()` (rekurzija sa 3 pozicijska argumenta umesto 8 imenovanih) — **~204ms i pre i posle, BEZ merljivog efekta u izolaciji** (suprotno predviđanju da je ovo "najveći pojedinačni dobitak"; prvi prolaz je slučajno spojio izmenu 1+2 pre prvog merenja, ponovljeno izolovano da se dobije pošten broj). Izmena 2: `_for_each_child_combination`/`_recurse` (rekurzivni generator) → `_child_combinations` (`itertools.product` + filter, `@functools.cache` po (counts, free_slots)) — **~204ms → ~163ms**, potvrđuje da je generator/rekurzija overhead bio stvaran. Izmena 3: `_room_cost` keširan po pozivu `solve()`, ključ (room_code, adults, sorted(child_ages)) — **~163ms → ~90ms**, u skladu sa procenom iz poruke 14. **Ukupno ~204ms→~90ms (2.3×), cilj <50ms NIJE dostignut** — stalo tačno gde je instrukcija rekla da se stane, nije se pogađalo dalje. Preostalo grlo: `best()` sopstvena Python poziv/petlja-režija (63% preostalog vremena), ne aritmetika — dalje smanjenje traži promenu REDOSLEDA pretrage, što je korisnik eksplicitno izdvojio kao poseban razgovor. 25/25 testova zeleno, nijedan promenjen, `ruff`/`mypy --strict`/`lint-imports` čisti |
+| **31.08.2026** | **Poruka 16 — korisnik prihvatio ~90ms, promena redosleda pretrage SVESNO ODBIJENA** (rizik tihe promene koje rešenje je "najjeftinije", ne samo brzine; tipičan slučaj ~0.14ms je ono što korisnici stvarno pogađaju). **ADR 0001 korak 3 zatvoren u celini.** Korak 4 dobija promenjen cilj od korisnika: jedna prava runda kraj-do-kraja (soleazur skrepuje → ingest upisuje → prave ponude u bazi), ne ceo API modul po modulu — `search` se ne piše dok nema pravih ponuda |
+| **31.08.2026** | **Prva prepreka za korak 4, niko je ranije nije video: `agency`/`source` prazne, `find_source` bi digao `source_not_found` za oba gotova adaptera.** `V3__seed_sources.sql` (nova migracija) upisuje dve agencije, dva izvora — `source.slug` provereno JEDNAK adapterovom `source_slug` (`soleazur.py:467`, `oktopod.py:479`), ne prepisano naslepo. Primenjeno na dev bazu (`alembic upgrade head`), provereno upitom da su redovi tu |
+| **31.08.2026** | **Druga prepreka, nađena čitanjem `core/ingest.py` pre pisanja crawl router-a: `start_run` je slao/čitao camelCase (`sourceSlug`/`runId`), suprotno ADR 0002 odluci.** `send_batch`/`finish_run` su već bili ispravni (snake_case preko `model_dump()`) — samo `start_run` je ostao na starom hardkodovanom obrascu iz pre ADR 0002. Ispravljeno na `source_slug`/`run_id`; nijedan test nije pinovao stari ugovor (provereno pre izmene) |
+| **31.08.2026** | **`content_hash()` stabilnost preko procesa dokazana PRE pisanja `OfferWriter`-a** (po eksplicitnoj instrukciji "prvo test, pa kod koji se na to oslanja) — `test_content_hash.py`, `raw_attributes` namerno izgrađen iz `set` iteracije (hash-seed-zavisan poredak), tri odvojena procesa (`PYTHONHASHSEED=1/2/nasumičan`), identičan heš u sva tri. `json.dumps(sort_keys=True)` sortira rekurzivno na svakom nivou — dict polja su bezbedna preko procesa; LISTE nisu (sort_keys ih ne dira), ali nijedan trenutni adapter ne gradi liste iz iteracije seta (provereno grep-om) |
+| **31.08.2026** | **`errors`/`db`/crawl servis gotovi — checkpoint po instrukciji, javljeno pre resolvera.** Novi paket `apps/api/src/travelapi/` (config, errors, db sa `psycopg_pool.ConnectionPool`, `common/from_db.py` po Odluci B, `crawl/{models,service,router}`, `app.py` sa `ApiKeyMiddleware`). `SourceHealth`/`AliasStatus` dodati u `travelcore.enums` (nedostajali od poruke 9). Treći `import-linter` kontrakt (`travelapi ne sme da uvozi travelscrape`) — 3 kept, 0 broken. 9 novih testova (`test_content_hash.py`, `test_from_db.py`, `test_crawl.py` — pravi HTTP kroz `TestClient`, prava baza), **203 ukupno (18 preskočeno bez `DATABASE_URL`)**, `ruff`/`mypy --strict`/`lint-imports` čisti. Usput pročitan `psycopg_pool` izvor (`pool.py:184-190`) da se potvrdi da `pool.connection()` već jeste tačno jedna transakcija — bitno za "transakcija po ponudi" zahtev u sledećem delu (ingest/`OfferWriter`) |

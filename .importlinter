@@ -2,6 +2,7 @@
 root_packages =
     travelcore
     travelscrape
+    travelapi
 include_external_packages = True
 
 [importlinter:contract:travelcore-je-cist]
@@ -21,4 +22,10 @@ forbidden_modules =
 name = travelcore ne sme da zna za travelscrape
 type = forbidden
 source_modules = travelcore
+forbidden_modules = travelscrape
+
+[importlinter:contract:api-ne-zna-za-skreper]
+name = travelapi ne sme da uvozi travelscrape
+type = forbidden
+source_modules = travelapi
 forbidden_modules = travelscrape
