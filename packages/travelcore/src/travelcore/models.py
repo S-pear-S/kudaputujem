@@ -201,6 +201,20 @@ class AccommodationIn(BaseModel):
         return v
 
 
+def _sort_hash_lists(payload: dict[str, Any]) -> None:
+    """Sortira liste unutar `OfferIn.content_hash()` payload-a in-place, po stabilnom ključu.
+
+    Termini po `(start_date, end_date)`, cene unutar termina po `(room_code, slot)`, doplate
+    po `code` — i na nivou ponude i na nivou termina. Sva tri polja su uvek prisutna u dumpu
+    (`default_factory=list`, ne `None`), pa nema potrebe za `.get()` odbranom.
+    """
+    payload["departures"].sort(key=lambda d: (d["start_date"], d["end_date"]))
+    for departure in payload["departures"]:
+        departure["prices"].sort(key=lambda p: (p["room_code"], p["slot"]))
+        departure["surcharges"].sort(key=lambda s: s["code"])
+    payload["surcharges"].sort(key=lambda s: s["code"])
+
+
 class OfferIn(BaseModel):
     """Kanonska ponuda spremna za ingest."""
 
@@ -256,8 +270,17 @@ class OfferIn(BaseModel):
 
         Namerno preskače polja koja se menjaju bez promene suštine (nema ih ovde),
         i koristi sortirane ključeve da JSON redosled ne pravi lažne promene.
+
+        `sort_keys=True` sortira REKURZIVNO samo ključeve rečnika, ne i redosled elemenata
+        liste — `_sort_hash_lists()` zato sortira termine/cene/doplate po stabilnom ključu
+        pre serijalizacije, da heš zavisi isključivo od SADRŽAJA ponude, ne od redosleda u
+        kom ga je adapter proizveo. Ovo je svojstvo funkcije, ne pretpostavka o adapterima:
+        da nema ovoga, bilo bi tačno da nijedan DANAŠNJI adapter ne meša redosled liste, ali
+        sutrašnji bi mogao (npr. paralelno skrepovanje, iteracija preko `set`-a) i heš bi
+        tiho postao nestabilan preko pokretanja skrepera — vidi test_content_hash.py.
         """
         payload = self.model_dump(mode="json", exclude_none=True)
+        _sort_hash_lists(payload)
         blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 

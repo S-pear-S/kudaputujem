@@ -450,7 +450,7 @@ svaki se završava zelenim `pytest`-om, Kotlin se briše poslednji.
 | **Jedan `.venv` u korenu** | `apps/scrapers/.venv` i `apps/api/.venv` spojeni u `D:\Kiki\kudaputujem\.venv`, sva tri paketa (`travelcore`, `travelscrape`, `travelapi`) instalirana `-e` u njega | ✓ **commit `18d70cf`** — `pytest.ini` u korenu, `pytest`/`ruff`/`mypy`/`lint-imports` isti rezultati kao pre premeštanja |
 | **2, C3** | `postgres_data` volumen od 15.08 se briše, prava baza se pravi iznova ISKLJUČIVO kroz `alembic`, prava lozinka u `.env` | ✓ **GOTOVO 19.08.2026** — korisnik tražio rezervnu kopiju PRE brisanja (`docker volume rm` prvo blokiran auto-mode klasifikatorom kao destruktivna radnja, korisnik eksplicitno potvrdio). Backup 129KB/2727 linija (van repoa), potvrđeno da nema podataka van geo seed-a (samo `destination`=323, `destination_alias`=541, svih ostalih 17 tabela = 0). Volumen obrisan, baza nastala isključivo kroz `alembic upgrade head`. **164 testa prolaze, 0 preskočeno** (153 + `test_fetch.py` + prošireni karakterizacioni testovi od poruke 5/6). `ref`/`mig` baze nestale zajedno sa obrisanim volumenom (živele su u istom Postgres instance-u) — ništa dodatno za čišćenje |
 | **3** | `OccupancySolverTest.kt` → `tests/test_occupancy.py` (svi crveni), pa `pricing/occupancy.py` dok ne pozelene | ⏳ **SLEDEĆI KORAK** — čeka korisnikovo "kreni" |
-| **4** | **CILJ PROMENJEN (poruka 16, 31.08.2026): jedna prava runda od kraja do kraja, ne ceo API.** `errors` → `db` → `geo` → `accommodation` → `ingest`/`OfferWriter`. `search`/`pricing/price_index` se NE pišu u ovom prolazu (nema pravih ponuda u bazi dok ingest ne proradi) | `errors`/`db`/crawl servis + `V3` migracija (agency/source seed) **GOTOVI**, treći `import-linter` kontrakt dodat i zelen — vidi §7 korak 4, §9. **Resolveri i ingest/OfferWriter SLEDEĆI, nisu počeli** — stalo posle crawl servisa po instrukciji ("javi kad errors, db i crawl budu gotovi, pre resolvera") |
+| **4** | **CILJ PROMENJEN (poruka 16, 31.08.2026): jedna prava runda od kraja do kraja, ne ceo API.** `errors` → `db` → `geo` → `accommodation` → `ingest`/`OfferWriter`. `search`/`pricing/price_index` se NE pišu u ovom prolazu (nema pravih ponuda u bazi dok ingest ne proradi) | `errors`/`db`/crawl servis + `V3` migracija (agency/source seed) **GOTOVI**. `geo`/`accommodation` resolveri + `V4` migracija **GOTOVI** — `AccommodationResolver` sa svesnom ispravkom (ADR 0003, §9/§13). Treći `import-linter` kontrakt zelen. **`ingest`/`OfferWriter` SLEDEĆI, nije počeo** — stalo po instrukciji ("javi kad resolveri i V4 budu gotovi, pre OfferWriter-a"), vidi §7 korak 4 |
 | **5** | E2E provera: `soleazur` skreper → `POST /internal/ingest` → baza → `GET /search` vraća tu ponudu, bez izmene `IngestClient`-a | ne početo |
 | **6** | Brisanje `apps/api/src/main/kotlin`, `src/test/kotlin`, `build.gradle.kts`, `settings.gradle.kts`, `gradle/`, `gradlew*`, JVM `Dockerfile`, čišćenje `docker-compose.yml` | **ne dirati pre koraka 5** |
 | **7** | VS Code config (`.vscode/`), uklanjanje pominjanja IntelliJ/Gradle iz `README.md`/`CLAUDE.md` | ne početo |
@@ -702,8 +702,21 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
      `import-linter` kontrakt dodat (`travelapi ne sme da uvozi travelscrape`, `.importlinter`).
      **9 novih testova** (`test_content_hash.py`, `test_from_db.py`, `test_crawl.py` — pravi HTTP
      kroz `TestClient`, prava baza, ne mock), **203 ukupno (18 preskočeno bez `DATABASE_URL`)**,
-     `ruff`/`mypy --strict`/`lint-imports` čisti. Detalji u §9. **Javljeno korisniku, čeka se
-     "kreni" pre resolvera** — po instrukciji, ne nastavlja se samostalno.
+     `ruff`/`mypy --strict`/`lint-imports` čisti. Detalji u §9. Javljeno korisniku, korisnik
+     rekao "kreni" — nastavljeno na resolvere (vidi bullet ispod).
+   - **`geo`/`accommodation` resolveri GOTOVI (31.08.2026), sa `V4` migracijom, PRE
+     `OfferWriter`-a — po instrukciji, javljeno korisniku i stalo tu.** `geo/resolver.py`
+     (prevod `DestinationResolver.kt`, veran port, bez odstupanja) i
+     `accommodation/resolver.py` (prevod `AccommodationResolver.kt`, **PRVO SVESNO
+     ODSTUPANJE od vernog porta** — vidi ADR 0003, `docs/decisions/
+     0003-accommodation-resolver-destinacija.md`, i §9/§13). Migracija `V4` (agency/source
+     tabele netaknute, `V1`–`V3` se ne diraju — pravilo 4): `accommodation_alias` dobija
+     `destination_id`, `uq_accommodation_alias` postaje svestan destinacije. Tabela je bila
+     prazna pre migracije (provereno upitom). **5 novih testova** (2 destination + 3
+     accommodation, uklj. test koji dokazano PADA na starom ponašanju — provereno pre
+     pisanja porta privremenim skriptom van repoa), **209 ukupno**, `ruff`/`mypy --strict`/
+     `lint-imports` čisti. Drugi nalaz iz istog Kotlin fajla (`fuzzyHit` poredi kanonsko ime
+     sa sirovim, fuzzy grana slabo radi) zabeležen za Fazu B, **NIJE popravljen** — §7 Faza B.
    - **Obavezan ugovorni test, deo ovog koraka, ne opciono:** pravi `OfferIn` sa punim sadržajem
      mora proći kroz pravi `POST /internal/ingest/offers` i stići u bazu nepromenjen. Ne mock,
      ne poređenje šema — pravi HTTP zahtev, prava baza. Dosad ovaj lanac **nikad nije proveren
@@ -868,6 +881,19 @@ Nije kozmetika, tri nezavisna nalaza koja se spajaju u isti problem:
 
 Ništa od ovoga nije menjano — sve zabeleženo, čeka isti razgovor. Odluka mora pokriti sve troje
 odjednom: menjanje samo jedne kolone bez ostale dve premešta problem, ne rešava ga.
+
+**Novi nalaz (poruka 16, 31.08.2026, iz istog `AccommodationResolver.kt` čitanja kao ADR
+0003 — vidi §13): `fuzzyHit` poredi `similarity()` KANONSKOG imena (bez "hotel"/"vila"/...
+prefiksa) sa SIROVIM imenom upisanim u `accommodation.name`.** `canonical_accommodation_name("Hotel
+Porto Matina")` → `"porto matina"`, ali `accommodation.name` u bazi ostaje `"Hotel Porto
+Matina"` (sirovo, namerno — za prikaz). `similarity(norm_text(name), :canonical)` zato
+poredi `"hotel porto matina"` (normalizovano, ali BEZ skidanja prefiksa) sa `"porto
+matina"` (kanonsko) — dva stringa različite dužine sa istim sadržajem retko pređu prag od
+0.90 kod `pg_trgm` trigram sličnosti (prefiks menja skoro polovinu trigrama kod kraćih
+imena). Posledica: fuzzy grana praktično nikad ne opali za hotele čije ime sadrži tip
+objekta, iako je to čest slučaj. **Preneto kakvo jeste, NIJE ispravljeno sada** (za razliku
+od `aliasHit` nalaza, ADR 0003) — drugačiji tip problema (grana slabo radi, ne tiho spaja
+pogrešno), zabeleženo za Fazu B, čeka isti razgovor kao kapacitetne kolone.
 
 ---
 
@@ -1127,6 +1153,8 @@ dece+8 tipova soba) je redak na stranici od 20 rezultata i cena tog reda ne blok
 | **`psycopg_pool.ConnectionPool.connection()` transakciona semantika — pročitano iz izvora pre oslanjanja** | informativno, potvrđeno | `pool.py:184-190`: `connection()` radi `with conn:` (`Connection.__exit__`), što COMMIT-uje pri čistom izlasku i ROLLBACK-uje pri izuzetku. Znači `with pool.connection() as conn:` je već tačno jedna transakcija bez dodatnog `conn.transaction()` omotača — `db.transaction()` je samo čitljivo ime za isto. Ovo je bitno za "transakcija po ponudi" zahtev (ADR 0001 korak 4, ingest deo, sledeći na redu): jedan `with db.transaction():` blok po ponudi u petlji znači da loša ponuda rollback-uje SAMO svoju transakciju, prethodno komitovane ponude ostaju upisane — isto ponašanje kao Kotlin `@Transactional fun write(offer: OfferIn, ...)`. |
 | `content_hash()` stabilnost preko procesa — provereno PRE pisanja `OfferWriter`-a, po instrukciji | ✓ potvrđeno, test zeleno | `test_content_hash.py` gradi `OfferIn` sa `raw_attributes` namerno izgrađenim iteracijom preko `set`-a (hash-seed-zavisan poredak), serijalizuje u tri ODVOJENA procesa (`PYTHONHASHSEED=1`, `=2`, nasumičan) i poredi heš — **identičan u sva tri**. Potvrđuje da `json.dumps(sort_keys=True)` sortira REKURZIVNO na svakom nivou ugnježdenog dict-a, pa dict polja ne kvare stabilnost heša između pokretanja skrepera (svako pokretanje je nov proces, CPython nasumično bira `PYTHONHASHSEED` po difoltu). Test NAMERNO ne pokriva slučaj gde bi LISTA (ne dict) bila izgrađena iz iteracije seta — `sort_keys` ne sortira sadržaj lista, a nijedan trenutni adapter (soleazur/oktopod, provereno grep-om) ne gradi liste na taj način, samo `.append()` u redosledu dokumenta. Da neki budući adapter to uradi, `content_hash()` bi tiho postao nestabilan preko procesa — vredi imati na umu pri pisanju novih adaptera. |
 | `SourceHealth`/`AliasStatus` dodati u `travelcore.enums` (ADR 0001 korak 4) | informativno | Nedostajali su otkad je popisano u poruci 8/9 (§7 korak 4, "Sistemski nedostatak"). Potrebni za `crawl/service.py` (`SourceHealth` za `source.health_status`) i biće potrebni za `geo`/`accommodation` resolvere (`AliasStatus` za `destination_alias.status`/`accommodation_alias.status`) u sledećem delu. `DestinationKind`/`LeadStatus` i dalje nedostaju — nisu trebali za errors/db/crawl, dodaju se kad zatreba (geo resolver ne čita `destination.kind`). |
+| **`AccommodationResolver.aliasHit` (Kotlin) spaja hotele istog imena preko GRANICE DESTINACIJE — PRVO svesno odstupanje porta od Kotlina, ADR 0003** | ✓ rešeno, 01.09.2026 | Nalaz pri čitanju `AccommodationResolver.kt` red po red pre pisanja Python porta (isti postupak kao za sve module). `aliasHit` traži alias SAMO po `normalized` — "Vila Marija" u Sitoniji i "Vila Marija" u Budvi bi dobili isti `accommodation_id`, cene dva različita hotela bi se tiho spojile. `fuzzyHit`, funkcija odmah ispod u istom fajlu, IMA filter po destinaciji + komentar "bez destinacije ne spajamo, previše rizično" — dokaz da je odsustvo filtera u `aliasHit` previd, ne namera. Za razliku od bug-a u rangiranju dece kod solvera (§9, red "Poznat, NAMERNO neispravljen bug..."), ovde ne postoji nijedan test koji bi ispravkom prestao da važi kao specifikacija — zato je ADR 0003 odlučio da se ispravi u portu, ne prenese. Migracija `V4__accommodation_alias_destination.sql`: `destination_id` kolona + novi `uq_accommodation_alias` indeks svestan destinacije (samo sužavanje SQL upita bez izmene indeksa bi pomerilo kvar sa tihog spajanja na `UniqueViolation`). **Dokazano PRE pisanja porta**: privremeni skript van repoa (`verify_old_bug.py`, obrisan) sa doslovnom kopijom starog Kotlin upita i starog `ON CONFLICT` cilja — isto ime u Budvi (id 47) i Sitoniji (id 71) je dalo `id_budva == id_sitonija == 1`, potvrđujući da bi test bez ispravke pao. Pun tekst obrazloženja: `docs/decisions/0003-accommodation-resolver-destinacija.md`. Drugi nalaz iz istog fajla (`fuzzyHit` poredi kanonsko ime sa sirovim, fuzzy grana slabo radi) NIJE ispravljen — §7 Faza B. |
+| **psycopg 3 `AmbiguousParameter` na `%(x)s IS NULL` kad je `x=None` i nema drugog pojavljivanja koje bi vezalo tip** | rešeno, 01.09.2026, informativno za budući SQL | Otkriveno pri prvom pokretanju `geo/resolver.py`/`accommodation/resolver.py` testova protiv prave baze — `could not determine data type of parameter $2`. Postgres ne može da izvede tip parametra iz same `IS NULL` provere (nema tipizovanog operatora sa druge strane), pa upit puca kad je vrednost `None` i nijedno DRUGO pojavljivanje istog parametra u upitu ne vezuje tip pre te tačke. Rešenje: eksplicitan cast na mestu prve upotrebe (`%(country)s::char(2) IS NULL`, `%(external_id)s::text IS NOT NULL`) — tip mora da se poklopi sa tipom kolone kasnije u istom upitu. Ovo je NOVA varijanta poznatog psycopg 3 `%`-gotcha iz §9 (bukvalni `%` u SQL-u vs. `IS NULL` provera bez tipiziranog konteksta) — različit uzrok, isti pouka: **ne pretpostavljaj da bilo koji "prazan"/"opcion" parametar prolazi kroz psycopg 3 bez eksplicitnog testiranja protiv prave baze.** |
 
 ---
 
@@ -1154,9 +1182,9 @@ pip install -e "apps/scrapers[dev]"
 pip install -e "apps/api[dev]"
 
 # pytest iz korena — pokuplja apps/scrapers/tests I apps/api/tests (pytest.ini u korenu)
-pytest                        # bez DATABASE_URL: 185 prolazi, 18 preskočeno (test_sql_parity.py + test_crawl.py)
+pytest                        # bez DATABASE_URL: 186 prolazi, 23 preskočeno (test_sql_parity.py + testovi nad bazom u apps/api)
 set DATABASE_URL=postgresql://kudaputujem:<lozinka-iz-.env>@localhost:5432/kudaputujem
-pytest                        # sa bazom: 203 testa, 0 preskočeno (stanje 31.08.2026, raste sa svakim korakom)
+pytest                        # sa bazom: 209 testa, 0 preskočeno (stanje 01.09.2026, raste sa svakim korakom)
 
 # lint/tipovi — i dalje per-paket (svaki ima svoj ruff/mypy config u svom pyproject.toml)
 (cd apps/scrapers && ruff check .)                                          # očekivano: čisto
@@ -1176,7 +1204,7 @@ cd ..
 # alembic — jedina staza do razvojne baze od 19.08.2026, Flyway se više NE koristi za nju
 cd apps/api
 set DATABASE_URL=postgresql://kudaputujem:<lozinka-iz-.env>@localhost:5432/kudaputujem
-alembic upgrade head          # primenjuje 0001 (V1), 0002 (V2), 0003 (V3 — agency/source seed)
+alembic upgrade head          # primenjuje 0001 (V1), 0002 (V2), 0003 (V3 — agency/source seed), 0004 (V4 — accommodation_alias.destination_id)
 alembic downgrade -1          # namerno diže NotImplementedError, ne dira bazu (pravilo o jednosmernim migracijama)
 cd ..
 
@@ -1345,3 +1373,7 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | **31.08.2026** | **Druga prepreka, nađena čitanjem `core/ingest.py` pre pisanja crawl router-a: `start_run` je slao/čitao camelCase (`sourceSlug`/`runId`), suprotno ADR 0002 odluci.** `send_batch`/`finish_run` su već bili ispravni (snake_case preko `model_dump()`) — samo `start_run` je ostao na starom hardkodovanom obrascu iz pre ADR 0002. Ispravljeno na `source_slug`/`run_id`; nijedan test nije pinovao stari ugovor (provereno pre izmene) |
 | **31.08.2026** | **`content_hash()` stabilnost preko procesa dokazana PRE pisanja `OfferWriter`-a** (po eksplicitnoj instrukciji "prvo test, pa kod koji se na to oslanja) — `test_content_hash.py`, `raw_attributes` namerno izgrađen iz `set` iteracije (hash-seed-zavisan poredak), tri odvojena procesa (`PYTHONHASHSEED=1/2/nasumičan`), identičan heš u sva tri. `json.dumps(sort_keys=True)` sortira rekurzivno na svakom nivou — dict polja su bezbedna preko procesa; LISTE nisu (sort_keys ih ne dira), ali nijedan trenutni adapter ne gradi liste iz iteracije seta (provereno grep-om) |
 | **31.08.2026** | **`errors`/`db`/crawl servis gotovi — checkpoint po instrukciji, javljeno pre resolvera.** Novi paket `apps/api/src/travelapi/` (config, errors, db sa `psycopg_pool.ConnectionPool`, `common/from_db.py` po Odluci B, `crawl/{models,service,router}`, `app.py` sa `ApiKeyMiddleware`). `SourceHealth`/`AliasStatus` dodati u `travelcore.enums` (nedostajali od poruke 9). Treći `import-linter` kontrakt (`travelapi ne sme da uvozi travelscrape`) — 3 kept, 0 broken. 9 novih testova (`test_content_hash.py`, `test_from_db.py`, `test_crawl.py` — pravi HTTP kroz `TestClient`, prava baza), **203 ukupno (18 preskočeno bez `DATABASE_URL`)**, `ruff`/`mypy --strict`/`lint-imports` čisti. Usput pročitan `psycopg_pool` izvor (`pool.py:184-190`) da se potvrdi da `pool.connection()` već jeste tačno jedna transakcija — bitno za "transakcija po ponudi" zahtev u sledećem delu (ingest/`OfferWriter`) |
+| **31.08.2026** | **Korisnik: "dobar rad", potvrdio `start_run` nalaz i determinizam heša. Naložio: komituj odmah (V3 primenjena na bazu a nije u gitu), content_hash determinizam po konstrukciji (ne po zapažanju), V4 + AccommodationResolver ispravka.** Commit `5411d95` — sav rad od errors/db/crawl checkpointa |
+| **01.09.2026** | **`content_hash()` determinizam po KONSTRUKCIJI, ne po zapažanju.** `_sort_hash_lists()` u `models.py` sortira termine po `(start_date, end_date)`, cene po `(room_code, slot)`, doplate po `code` — pre serijalizacije, unutar same funkcije. Novi test `test_content_hash_stable_under_list_reordering`: ista ponuda, termini/cene/doplate izmešani, isti heš. Razlog za promenu: "nijedan adapter danas ne gradi listu iz seta" je bilo zapažanje o dva postojeća adaptera, ne garancija za budući kod — ispravljeno na svojstvo funkcije po direktnoj primedbi korisnika |
+| **01.09.2026** | **ADR 0003 — `AccommodationResolver.aliasHit` (Kotlin) spaja hotele istog imena preko granice destinacije, PRVO svesno odstupanje porta od Kotlina.** Nalaz pri čitanju `AccommodationResolver.kt` pre pisanja Python porta: `aliasHit` traži SAMO po `normalized`, `fuzzyHit` odmah ispod IMA filter po destinaciji + komentar "previše rizično" — dokaz previda, ne namere. Migracija `V4__accommodation_alias_destination.sql` (tabela provereno prazna PRE pisanja migracije, upitom): `destination_id` kolona + novi `uq_accommodation_alias` indeks. **Test dokazano PADA na starom ponašanju** — privremeni skript van repoa sa doslovnom kopijom starog Kotlin upita, isto ime u Budvi i Sitoniji dalo isti `accommodation_id`, potvrđeno pre pisanja ispravke. Pun tekst: `docs/decisions/0003-accommodation-resolver-destinacija.md`. Usput otkriven i ispravljen NOV psycopg 3 nalaz (`AmbiguousParameter` na `%(x)s IS NULL` kad `x=None` bez drugog tipizovanog pojavljivanja) — eksplicitan `::cast` na mestu prve upotrebe, §9 |
+| **01.09.2026** | **`geo`/`accommodation` resolveri gotovi, `V4` primenjena — checkpoint po instrukciji, javljeno pre `OfferWriter`-a.** `geo/resolver.py` veran port bez odstupanja. **209 testova ukupno (23 preskočeno bez `DATABASE_URL`)**, `ruff`/`mypy --strict`/`lint-imports` čisti (3 kept, 0 broken) |
