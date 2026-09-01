@@ -4,35 +4,44 @@
 > Ako nešto u kodu protivreči ovom fajlu, prvo pitaj — ne pretpostavljaj da je fajl zastareo.
 > Kad doneseš novu odluku ili završiš veću stavku, **ažuriraj ovaj fajl u istom commit-u**.
 
-Poslednje ažuriranje: 31.08.2026. (**Poruka 16 — korisnik prihvatio ~90ms, ADR 0001 korak 3
-ZATVOREN U CELINI. Promena redosleda pretrage (grupisanje identičnih tipova soba, ranije
-odsecanje grana) je SVESNO ODBIJENA** — nosi rizik da se tiho promeni koja cena je "najbolja"
-(tačna, ali pogrešno rangirana kombinacija soba), a tipičan slučaj koji korisnici stvarno
-pogađaju je već ~0.14ms po pozivu (`minimum_for_adults`, 8 tipova soba) — daleko ispod bilo kog
-razumnog praga. Konačna tabela i zaključak u §9 (poruka 15/16 red). **ADR 0001 korak 4 počeo,
-sa CILJEM PROMENJENIM od strane korisnika**: ne "ceo API modul po modulu", nego JEDNA PRAVA
-runda od kraja do kraja — soleazur skrepuje, ingest upiše, u bazi stoje prave ponude. `search`
-se NE piše u ovom prolazu (334 linije SQL-a nad praznom tabelom su papir). Prva prepreka koju
-niko do sada nije video: migracije nemaju nijedan red u `agency`/`source`, `findSource` diže
-`source_not_found` za oba gotova adaptera — vidi §7 korak 4 za V3 migraciju i status.
-Usput, nezavisno od optimizacije (poruka 12, odeljak "Oktopod: ovo nije bug, nego nešto gore"):
-dva upisa objašnjenja (`oktopod.py` iznad linije 402 sad ima komentar, plus `docs/recon/oktopod.md`)
-o tome da `capacity_adults=4/capacity_extra=0` za oktopod NIJE stvarni kapacitet po ležajevima
-nego oktopodov "Broj plativih osoba" — slučajno se poklapa sa onim što solver očekuje. **Napisan
-i pušten prvi test koji spaja parser i solver** (`test_oktopod_solver_integration.py`) — tvrdnja
-"4 osobe u '1/3+1 STD' = 4 × cena iz tabele = 800.00" **PROLAZI**, potvrđuje slučajnu tačnost, ne
-otkriva bag. §7 Faza B ažuriran da spoji `capacity_adults`/`capacity_extra`/`capacity_total` u
-JEDNU stavku koja traži jednu odluku vlasnika (bilo je razbacano na dva mesta).
-**194 testa ukupno (181 prolazi + 13 preskočeno bez `DATABASE_URL`)** — bilo 193, +1 za novi
-integracioni test, nijedan postojeći rezultat promenjen. `ruff`/`mypy --strict` čisti.
-ADR 0001 korak 2 GOTOV, korak 3 GOTOV, njegova OPTIMIZACIJA DELIMIČNO ZAVRŠENA (poruka 11: 285 ms
-najgori slučaj = ~5.7s po pretrazi na stranici rezultata; punjenje `PriceIndexBuilder` indeksa
-NIJE problem, ~0.08–0.12h na 50.000 termina — potvrđeno tri puta, poruka 12/14/15). Tri izmene iz
-poruke 15 (§9) spustile najgori slučaj sa ~204ms na ~90ms — **cilj < 50ms NIJE dostignut**, tipičan
-< 2ms i dalje ispunjen. Svih 25 testova u `test_occupancy.py` ostaje zeleno, nijedan promenjen.
-Jedan `.venv` u korenu za sva tri Python paketa. Kotlin API još postoji nepromenjen, i dalje jedini
-radni backend — vidi §6/§9. **Čeka korisnikovu odluku o sledećem koraku (promena redosleda
-pretrage je poseban razgovor) — ne kreće se samostalno, ne kreće se na korak 4.**)
+Poslednje ažuriranje: 01.09.2026. (**Poruka 16, u celini — HANDOFF TAČKA za sledeću sesiju.**
+ADR 0001 korak 3 (solver performanse) je **ZATVOREN U CELINI** — korisnik prihvatio ~90ms,
+svesno odbio promenu redosleda pretrage (§9, poslednji red te teme). ADR 0001 korak 4 je **U
+TOKU, cilj promenjen** od strane korisnika: ne "ceo API modul po modulu", nego JEDNA PRAVA
+runda kraj-do-kraja — soleazur skrepuje, ingest upiše, prave ponude u bazi. `search`/
+`pricing/price_index` se **NE pišu u ovom prolazu**.
+
+**Gotovo u koraku 4, ovim redom** (svaki deo komitovan, svaki sa sopstvenim testovima protiv
+prave baze): `errors.py`, `db.py` (`psycopg_pool.ConnectionPool`), crawl servis
+(`crawl/{models,service,router}.py`), migracija `V3` (agency/source seed — bez nje nijedan
+adapter ne može da otvori rundu, §9), `geo/resolver.py` (veran port), `accommodation/
+resolver.py` **sa svesnim odstupanjem od Kotlin porta** (ADR 0003 — `aliasHit` u Kotlinu
+spaja hotele istog imena preko granice destinacije, ispravljeno u Pythonu, ne preneto),
+migracija `V4` (accommodation_alias dobija destination_id). Usput: `content_hash()` postao
+deterministički PO KONSTRUKCIJI (sortira termine/cene/doplate pre serijalizacije), dokazano
+testom PRE nego što se `OfferWriter` na njega osloni. Sve u `apps/api/src/travelapi/`.
+Commit-i: `5411d95` (errors/db/crawl/V3), `b814c20` (V4/resolveri/content_hash).
+
+**SLEDEĆI KORAK, tačno gde treba nastaviti: `ingest`/`OfferWriter`.** Prevod
+`ingest/{IngestController,IngestService,OfferWriter}.kt` — prima `IngestBatch`
+(`travelcore.models`, već postoji, ne piše se iznova) na `/internal/ingest/offers`, zove
+`geo`/`accommodation` resolvere (već gotovi), upisuje `offer`/`departure`/`price_option`/
+`surcharge`/`transport_leg`, **transakcija po ponudi** (jedna loša ponuda ne obara ceo batch
+— `db.transaction()` po ponudi u petlji je već dovoljno, dokazano čitanjem `psycopg_pool`
+izvora, §9). Obavezan **ugovorni test** (ADR 0002): pravi `OfferIn` sa punim sadržajem kroz
+pravi HTTP `POST /internal/ingest/offers`, prava baza, ne mock. **NIJE POČETO — čeka
+korisnikovo "kreni", po istom obrascu kao ceo dosadašnji rad (ne kreće se samostalno).**
+Detaljan spisak šta `OfferWriter` treba da radi je u §7 korak 4 i u Kotlin fajlovima
+navedenim gore (pročitati ih PRE pisanja porta, kao i za sve dosadašnje module).
+
+**Okruženje spremno za nastavak:** Postgres kontejner gore i zdrav (`docker compose ps`),
+migracije `0001`–`0004` primenjene (`alembic upgrade head` je no-op ako se ponovo pokrene),
+`.venv` u korenu ima sve zavisnosti instalirane. **209 testova (23 preskočeno bez
+`DATABASE_URL`)**, `ruff`/`mypy --strict`/`lint-imports` čisti (3 kept, 0 broken). `git
+status` čist — sve komitovano osim `instrukcije/porukazaclaudecode{7..14}.md`, koji su
+korisnikovi fajlovi, već primenjeni prema §13 istoriji, namerno ne brisani (§2 konvencija).
+Kotlin API i dalje postoji nepromenjen, i dalje JEDINI backend koji stvarno odgovara na HTTP
+zahteve — ne dirati ga, brisanje je korak 6, dolazi tek posle koraka 5 (E2E).)
 Repo: `https://github.com/S-pear-S/kudaputujem` · grana `main`
 
 ---
@@ -60,12 +69,14 @@ Ako je ovo prvi put da vidiš ovaj repo u ovoj sesiji, evo najkraće moguće sli
   `packages/travelcore`, `apps/scrapers`, `apps/api`. Više NEMA `apps/scrapers/.venv` ni
   `apps/api/.venv` posebno. `pytest` iz korena (root `pytest.ini`) pokuplja i
   `apps/scrapers/tests` i `apps/api/tests`. Vidi §10.
-- **Sledeći korak, kad korisnik da zeleno svetlo:** ADR 0001 korak 3 — `OccupancySolverTest.kt`
-  → `tests/test_occupancy.py` PRVO (svi crveni, nepromenjeni brojevi), tek onda
-  `pricing/occupancy.py`. Vidi §7. **Ne kreći sam — korisnik traži da javiš C3 rezultat i čekaš.**
-- Radni obrazac sa korisnikom ide kroz `instrukcije/` (patch/md fajlovi) — vidi §2. Poruke
-  `porukazaclaudecode1.md` do `7.md` su **već primenjene i zatvorene** u ovoj tački; ako stigne
-  `porukazaclaudecode8.md` ili novi `.patch`, to je sledeći zadatak.
+- **Sledeći korak: `ingest`/`OfferWriter` (ADR 0001 korak 4, poslednji deo).** Detaljno
+  opisano u header-u iznad i u §7 korak 4. `errors`/`db`/crawl servis/`geo`/`accommodation`
+  resolveri su GOTOVI (komitovano), koristi ih direktno, ne piši ih iznova.
+- Radni obrazac sa korisnikom ide kroz `instrukcije/` (patch/md fajlovi, vidi §2) **i, od
+  poruke 15/16, direktno kroz chat** (nema više `.md` fajla po poruci — "poruka 15"/"poruka
+  16" u ovom fajlu su chat poruke, ne fajlovi). `porukazaclaudecode1.md` do `14.md` su
+  **već primenjene i zatvorene**. Ako stigne `porukazaclaudecode15.md`/novi `.patch`/nova
+  poruka u chat-u, to je sledeći zadatak — pročitaj je celu pre bilo koje izmene.
 - Skreper adapteri: `soleazur.rs` i `oktopod.rs` gotovi i verifikovani. `grandtours.rs` je
   sledeći na redu, čeka fixture od korisnika (Chrome ekstenzija nema još dozvolu za taj domen).
 
@@ -1279,12 +1290,12 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
    (§9) — zatvorenje za `_best` (bez merljivog efekta u izolaciji), `_child_combinations` bez
    generatora + keširano (~204→~163ms), `_room_cost` keširan po pozivu `solve()` (~163→~90ms).
    **Ukupno 2.3× brže, cilj <50ms NIJE dostignut** (stalo tačno gde je instrukcija rekla da se
-   stane — "ako i dalje ne stigne, stani i javi"). **Trenutno otvoreno, čeka korisnika: da li se
-   ide na promenu redosleda pretrage** (grupisanje identičnih tipova soba, ranije odsecanje
-   grana, ili se prihvata ~90ms i ide se na korak 4). Korisnik je ovo eksplicitno označio kao
-   poseban razgovor i poseban rizik, ne prirodan nastavak ove tri izmene — **ne kreće se
-   samostalno**. Ovaj obrazac (pitanje o sledećem koraku, pauza pre nastavka) se ponovio već
-   DESET puta — i dalje ne pretpostavljaj da je pauza gotova bez eksplicitnog "kreni".
+   stane — "ako i dalje ne stigne, stani i javi"). **Poruka 16 (31.08.2026): ZATVORENO —
+   korisnik prihvatio ~90ms, promena redosleda pretrage SVESNO ODBIJENA** (rizik tihe promene
+   koje rešenje je "najjeftinije", ne samo brzine; tipičan slučaj ~0.14ms je ono što korisnici
+   stvarno pogađaju). ADR 0001 korak 3 zatvoren u celini, §9 poslednji red te teme.
+8. ~~Da li se nastavlja na `ingest`/`OfferWriter`?~~ **Odgovoreno 01.09.2026: korisnik rekao
+   "nastavi sa radom"** — isti signal kao dosadašnje "kreni". Rad na `OfferWriter`-u počeo.
 
 ---
 
