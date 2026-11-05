@@ -121,13 +121,23 @@ def snapshot(
     url: str = typer.Argument(..., help="URL koji treba preuzeti"),
     output: Path | None = typer.Option(None, "-o", help="Sačuvati u fajl umesto stdout"),
     json_: bool = typer.Option(False, "--json", help="Prikaži zaglavlja kao JSON"),
+    no_robots: bool = typer.Option(
+        False, "--no-robots", help="Preskočiti robots.txt proveru (svesno, uz obrazloženje)"
+    ),
 ) -> None:
-    """Preuzeti jedan URL i ispisati HTML/JSON sadržaj."""
+    """Preuzeti jedan URL i ispisati HTML/JSON sadržaj.
+
+    `robots.txt` se poštuje podrazumevano, isto kao u `run`. Razlog: `snapshot` je
+    alat kojim se snima fixture koji ulazi u repo i na kom se piše adapter — ako
+    stranicu ne smemo da dohvatimo, ne smemo ni da je snimimo ni da gradimo parser
+    na njoj. Stari kod je ovde tvrdo prosleđivao `check_robots=False`, što je bila
+    ista rupa kao nalaz S1, samo na drugom ulazu.
+    """
 
     async def _fetch() -> httpx.Response:
         # Za snapshot dozvoljeni su svi domeni (None = bez allowliste)
         async with HttpFetcher(allowed_domains=None) as fetcher:
-            return await fetcher.get(url, check_robots=False)
+            return await fetcher.get(url, check_robots=not no_robots)
 
     try:
         resp = asyncio.run(_fetch())

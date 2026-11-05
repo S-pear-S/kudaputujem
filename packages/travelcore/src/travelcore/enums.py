@@ -128,3 +128,38 @@ class AliasStatus(StrEnum):
     CONFIRMED = "CONFIRMED"
     PENDING = "PENDING"
     REJECTED = "REJECTED"
+
+
+class RobotsVerdict(StrEnum):
+    """Ishod provere `robots.txt` za jedan izvor.
+
+    Dve dozvole su namerno razdvojene, jer su **dva različita dokazna položaja**:
+    sajt koji nas izričito pušta nije isto što i sajt koji nije rekao ništa. Ako se
+    ikad donese odluka „uzimamo samo izvore koji izričito dozvoljavaju", sa ovom
+    razlikom je to jedan upit, a bez nje je ponovno dohvatanje svih izvora.
+
+    Dozvola po `robots.txt`-u **nije** uključenje izvora — uslovi korišćenja su
+    druga, pravno teža provera (`tos_verdict`), i obe moraju biti razrešene pre
+    nego što izvor počne da radi.
+
+    Kolona `source.robots_verdict` i njeno CHECK ograničenje dolaze u istoj
+    migraciji koja uvodi `acquisition_mode` i `tos_verdict` (§8 pravilo 1: enum i
+    CHECK se menjaju zajedno; kolona još ne postoji, pa CHECK dolazi sa njom).
+    """
+
+    # nije proveravano; podrazumevano
+    UNKNOWN = "UNKNOWN"
+    # robots.txt postoji i pušta NAŠ user agent na tu putanju
+    ALLOW_EXPLICIT = "ALLOW_EXPLICIT"
+    # robots.txt ne postoji (404) — dozvoljeno po RFC 9309, bez izražene želje
+    ALLOW_NO_ROBOTS = "ALLOW_NO_ROBOTS"
+    # zabranjuje, ili 5xx / timeout / mrežna greška
+    DENY = "DENY"
+
+    @property
+    def allows_fetch(self) -> bool:
+        """Da li se sa ovim ishodom sme poslati zahtev.
+
+        `UNKNOWN` ne dozvoljava: odsustvo provere nije dokaz da smemo.
+        """
+        return self in (RobotsVerdict.ALLOW_EXPLICIT, RobotsVerdict.ALLOW_NO_ROBOTS)

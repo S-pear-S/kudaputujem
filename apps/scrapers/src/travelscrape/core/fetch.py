@@ -21,6 +21,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
+from travelcore.enums import RobotsVerdict
 
 from .settings import Settings
 from .settings import settings as default_settings
@@ -67,6 +68,22 @@ class _DomainLimiter:
         self._next_allowed: float = 0.0
         self._lock = asyncio.Lock()
 
+    def raise_min_delay(self, seconds: float) -> None:
+        """Podize minimalni zastoj, nikad ga ne snizava.
+
+        `Crawl-delay` iz `robots.txt` ima prednost nad nasim minimumom kad je veci
+        (nalaz S1: nikad se nije citao). Sajt koji trazi manje od naseg minimuma
+        ne dobija brzi crawl — pravilo 7 u `CLAUDE.md` postavlja 2000 ms kao pod,
+        ne kao cilj.
+        """
+        if seconds > self._min_delay:
+            log.info(
+                "robots.txt trazi Crawl-delay %.1fs, podizem sa %.1fs",
+                seconds,
+                self._min_delay,
+            )
+            self._min_delay = seconds
+
     @asynccontextmanager
     async def throttle(self) -> AsyncGenerator[None, None]:
         # Cekamo slobodan slot za delay
@@ -88,27 +105,110 @@ class _DomainLimiter:
 
 
 class _RobotsCache:
+    """Kes `robots.txt` po domenu, fail-closed.
+
+    Nalaz S1 (`instrukcije/noveodluke.md`): stara verzija je upisivala `None` u kes
+    kad dohvatanje ne uspe i vracala `True`, status odgovora nije proveravala, i
+    `crawl_delay` nikad nije citala. Sve tri stvari su sada obrnute.
+
+    **Standard se postuje tamo gde govori, politika stoji u podatku.** Po RFC 9309
+    je 4xx "unavailable" i znaci da skreper **sme** da pristupi, a 5xx je
+    "unreachable" i znaci potpunu zabranu. Zato 404 ovde daje
+    `ALLOW_NO_ROBOTS`, a ne zabranu: fail-closed na 404 ne cuva nicju izrazenu
+    zelju, jer izrazene zelje nema, a kupuje gubitak izvora.
+
+    Stroga odluka nije ukinuta, nego **premestena na mesto gde nosi tezinu**:
+    dozvola po `robots.txt`-u nije ukljucenje izvora. Uslovi koriscenja su druga i
+    pravno teza provera (`tos_verdict`), i izvor bez razresenih uslova ne radi bez
+    obzira na to sta `robots.txt` kaze.
+
+    Fail-closed ostaje za: 5xx, timeout, mreznu gresku, i `robots.txt` koji se
+    procita pa zabrani.
+    """
+
     def __init__(self) -> None:
-        self._cache: dict[str, RobotFileParser | None] = {}
+        # Vrednost je parser (robots.txt postoji) ili ALLOW_NO_ROBOTS (404).
+        # Sentinel je upisan izricito, a ne kao `None`, da se ne bi citao kao
+        # "nesto je poslo naopako" — tacno ta dvosmislenost je bila nalaz S1.
+        # 5xx, timeout i mrezna greska se NE kesiraju, jer su prolazni: jedan
+        # mrezni problem ne sme da ugasi izvor do kraja procesa.
+        self._cache: dict[str, RobotFileParser | RobotsVerdict] = {}
+
+    @staticmethod
+    def _base(url: str) -> str:
+        parsed = httpx.URL(url)
+        return f"{parsed.scheme}://{parsed.host}"
+
+    async def verdict(self, url: str, client: httpx.AsyncClient) -> RobotsVerdict:
+        """Ishod provere za TACNU putanju iz `url`, ne za koren domena."""
+        base = self._base(url)
+        entry = self._cache.get(base)
+
+        if entry is None:
+            loaded = await self._load(base, client)
+            if loaded is RobotsVerdict.DENY:
+                return RobotsVerdict.DENY
+            self._cache[base] = loaded
+            entry = loaded
+
+        if entry is RobotsVerdict.ALLOW_NO_ROBOTS:
+            return RobotsVerdict.ALLOW_NO_ROBOTS
+
+        assert isinstance(entry, RobotFileParser)
+        # `can_fetch` prima pun URL, pa se proverava putanja koja se stvarno
+        # dohvata — ne koren domena (bivsi preflight je proveravao samo `/`).
+        if entry.can_fetch(USER_AGENT, url):
+            return RobotsVerdict.ALLOW_EXPLICIT
+        return RobotsVerdict.DENY
 
     async def is_allowed(self, url: str, client: httpx.AsyncClient) -> bool:
-        """True ako robots.txt dozvoljava scrapovanje url-a."""
-        parsed = httpx.URL(url)
-        base = f"{parsed.scheme}://{parsed.host}"
-        if base not in self._cache:
-            robots_url = f"{base}/robots.txt"
-            try:
-                resp = await client.get(robots_url, follow_redirects=True)
-                new_parser = RobotFileParser()
-                new_parser.parse(resp.text.splitlines())
-                self._cache[base] = new_parser
-                log.debug("robots.txt ucitan: %s", robots_url)
-            except Exception as exc:
-                log.debug("robots.txt nije dostupan za %s: %s", base, exc)
-                self._cache[base] = None
+        """True ako se sa dobijenim ishodom sme poslati zahtev."""
+        return (await self.verdict(url, client)).allows_fetch
 
-        parser = self._cache[base]
-        return parser is None or parser.can_fetch(USER_AGENT, url)
+    def crawl_delay(self, url: str) -> float | None:
+        """`Crawl-delay` koji sajt trazi, ili `None` ako ga ne navodi.
+
+        Vraca `None` i kad `robots.txt` nije (jos) procitan ili ne postoji —
+        pozivalac tada ostaje na podrazumevanom minimumu iz podesavanja.
+        """
+        entry = self._cache.get(self._base(url))
+        if not isinstance(entry, RobotFileParser):
+            return None
+        delay = entry.crawl_delay(USER_AGENT)
+        return None if delay is None else float(delay)
+
+    async def _load(
+        self, base: str, client: httpx.AsyncClient
+    ) -> RobotFileParser | RobotsVerdict:
+        """Dohvata `robots.txt`. `DENY` znaci "ne smemo i ne kesiraj"."""
+        robots_url = f"{base}/robots.txt"
+        try:
+            resp = await client.get(robots_url, follow_redirects=True)
+        except Exception as exc:
+            log.warning(
+                "robots.txt nedostupan za %s (%s) — izvor se preskace (fail-closed)", base, exc
+            )
+            return RobotsVerdict.DENY
+
+        # 404 je odgovor, ne neuspeh: sajt nije izrazio zelju. Telo se NE parsira
+        # (stranica greske je cesto HTML koji `RobotFileParser` tiho procita kao
+        # "nema pravila"), ali ishod je dozvola po standardu.
+        if resp.status_code == httpx.codes.NOT_FOUND:
+            log.info("robots.txt ne postoji na %s (404) — ALLOW_NO_ROBOTS", base)
+            return RobotsVerdict.ALLOW_NO_ROBOTS
+
+        if resp.status_code != httpx.codes.OK:
+            log.warning(
+                "robots.txt za %s vratio %s — izvor se preskace (fail-closed)",
+                base,
+                resp.status_code,
+            )
+            return RobotsVerdict.DENY
+
+        parser = RobotFileParser()
+        parser.parse(resp.text.splitlines())
+        log.debug("robots.txt ucitan: %s", robots_url)
+        return parser
 
 
 # ---------------------------------------------------------------------------
@@ -199,20 +299,35 @@ class HttpFetcher:
         self,
         url: str,
         *,
-        check_robots: bool = False,
+        check_robots: bool = True,
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> httpx.Response:
-        """GET sa rate limitom, SSRF zastitom i opcionom robots.txt proverom."""
+        """GET sa rate limitom, SSRF zastitom i OBAVEZNOM robots.txt proverom.
+
+        `check_robots` je podrazumevano `True` — provera je obaveza fetchera, ne
+        opcija pozivaoca (nalaz S1: podrazumevano je bilo `False`, i nijedan od tri
+        poziva u adapterima ga nije predavao, pa provera nikad nije radila).
+
+        Jedini slucaj u kom se prosledjuje `False` je dohvatanje samog
+        `robots.txt`-a ili recon alat koji svesno gleda sta sajt objavljuje pre
+        nego sto izvor uopste postoji — i tada se to upisuje na mestu poziva.
+        """
         assert self._client is not None, "HttpFetcher mora biti korisćen kao context manager"
 
         host = httpx.URL(url).host
         limiter = self._get_limiter(host)
 
-        async with limiter.throttle():
-            if check_robots and not await self._robots.is_allowed(url, self._client):
+        if check_robots:
+            if not await self._robots.is_allowed(url, self._client):
                 raise RobotsDisallowedError(f"robots.txt zabranjuje: {url}")
+            # `Crawl-delay` sajta ima prednost nad nasim minimumom kad je veci.
+            # Cita se posle `is_allowed`, jer je tek tada `robots.txt` u kesu.
+            requested = self._robots.crawl_delay(url)
+            if requested is not None:
+                limiter.raise_min_delay(requested)
 
+        async with limiter.throttle():
             resp = await self._do_get(url, params=params, headers=headers)
             if resp.status_code == 429:
                 raise RateLimitedError(f"429 Too Many Requests: {url}")
