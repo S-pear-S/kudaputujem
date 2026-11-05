@@ -17,6 +17,7 @@ from starlette.responses import JSONResponse, Response
 from .config import settings
 from .crawl.router import router as crawl_router
 from .errors import register_exception_handlers
+from .ingest.router import router as ingest_router
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.add_middleware(ApiKeyMiddleware)
     app.include_router(crawl_router)
+    app.include_router(ingest_router)
     return app
 
 
