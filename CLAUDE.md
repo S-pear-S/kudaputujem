@@ -4,44 +4,53 @@
 > Ako nešto u kodu protivreči ovom fajlu, prvo pitaj — ne pretpostavljaj da je fajl zastareo.
 > Kad doneseš novu odluku ili završiš veću stavku, **ažuriraj ovaj fajl u istom commit-u**.
 
-Poslednje ažuriranje: 01.09.2026. (**Poruka 16, u celini — HANDOFF TAČKA za sledeću sesiju.**
-ADR 0001 korak 3 (solver performanse) je **ZATVOREN U CELINI** — korisnik prihvatio ~90ms,
-svesno odbio promenu redosleda pretrage (§9, poslednji red te teme). ADR 0001 korak 4 je **U
-TOKU, cilj promenjen** od strane korisnika: ne "ceo API modul po modulu", nego JEDNA PRAVA
-runda kraj-do-kraja — soleazur skrepuje, ingest upiše, prave ponude u bazi. `search`/
-`pricing/price_index` se **NE pišu u ovom prolazu**.
+Poslednje ažuriranje: 01.09.2026. (**Poruka 16, u celini — ADR 0001 KORAK 4 (redefinisani
+cilj) ZAVRŠEN. HANDOFF TAČKA za sledeću sesiju.**
+ADR 0001 korak 3 (solver performanse) **ZATVOREN U CELINI** — korisnik prihvatio ~90ms,
+svesno odbio promenu redosleda pretrage (§9). Korak 4, cilj promenjen od korisnika ("ne
+ceo API modul po modulu, nego JEDNA PRAVA runda kraj-do-kraja") — **GOTOV**: `errors.py`,
+`db.py` (`psycopg_pool.ConnectionPool`), crawl servis, migracija `V3` (agency/source seed),
+`geo/resolver.py` (veran port), `accommodation/resolver.py` **sa svesnim odstupanjem** (ADR
+0003 — `aliasHit` u Kotlinu spaja hotele istog imena preko granice destinacije, ispravljeno
+u Pythonu, ne preneto), migracija `V4`, `content_hash()` deterministički po konstrukciji, i
+sad **`ingest/{writer,service,router}.py`** (prevod `OfferWriter`/`IngestService`/
+`IngestController.kt`, ingest deo) — prima `IngestBatch` na `POST /internal/ingest/offers`,
+zove resolvere, upisuje `offer`/`departure`/`price_option`/`surcharge`/`transport_leg`,
+transakcija po ponudi (dokazano testom da loša ponuda ne obara batch). **Obavezan ugovorni
+test iz ADR 0002 napisan i zelen** (`test_ingest_contract.py`, 4 testa: pun `OfferIn` kroz
+pravi HTTP stiže u bazu nepromenjen, dry-run ne piše ništa, batch preko limita se odbija,
+loša ponuda u batch-u ne obara ostale). **Dodatno: prava soleazur fixture stranica (pravi
+HTML, pravi parser) provučena kroz pravi ingest** (`test_soleazur_ingest_integration.py`)
+— najbliže "soleazur skrepuje, ingest upiše" što je moguće BEZ žive mreže (ova sesija nema
+izlaz ka `.rs` sajtovima, §4.4/§7). `search`/`pricing/price_index` i dalje NISU pisani (bila
+je namerna granica ovog koraka, ne propust). Commit-i: `5411d95`, `b814c20`, `ca2ce87`
+(handoff), + jedan koji nastaje ovim ažuriranjem za `ingest`/`OfferWriter`.
 
-**Gotovo u koraku 4, ovim redom** (svaki deo komitovan, svaki sa sopstvenim testovima protiv
-prave baze): `errors.py`, `db.py` (`psycopg_pool.ConnectionPool`), crawl servis
-(`crawl/{models,service,router}.py`), migracija `V3` (agency/source seed — bez nje nijedan
-adapter ne može da otvori rundu, §9), `geo/resolver.py` (veran port), `accommodation/
-resolver.py` **sa svesnim odstupanjem od Kotlin porta** (ADR 0003 — `aliasHit` u Kotlinu
-spaja hotele istog imena preko granice destinacije, ispravljeno u Pythonu, ne preneto),
-migracija `V4` (accommodation_alias dobija destination_id). Usput: `content_hash()` postao
-deterministički PO KONSTRUKCIJI (sortira termine/cene/doplate pre serijalizacije), dokazano
-testom PRE nego što se `OfferWriter` na njega osloni. Sve u `apps/api/src/travelapi/`.
-Commit-i: `5411d95` (errors/db/crawl/V3), `b814c20` (V4/resolveri/content_hash).
+**Nalaz iz integracionih testova (§9, informativno, NE bug):** `finish()` (crawl servisa)
+zove `_expire_unseen` kad je status OK, što deaktivira SVAKU ponudu tog izvora koja nije
+"viđena" (`last_seen_at`) u trenutnoj rundi — matematički ispravno (§4.6), ali znači da
+testovi koji dele isti `source_id` (`soleazur-grcka`) i pozivaju `finish(force=True)`
+međusobno deaktiviraju jedni drugima kreirane test-ponude iz ranijih pokretanja test
+suite-a. Dev baza ima gomilu sintetičkih ponuda iz ove sesije (`contract-*`, prave
+`soleazur` ponude) — nijedna nije obrisana, korisnik nije pitan da li da se očisti.
 
-**SLEDEĆI KORAK, tačno gde treba nastaviti: `ingest`/`OfferWriter`.** Prevod
-`ingest/{IngestController,IngestService,OfferWriter}.kt` — prima `IngestBatch`
-(`travelcore.models`, već postoji, ne piše se iznova) na `/internal/ingest/offers`, zove
-`geo`/`accommodation` resolvere (već gotovi), upisuje `offer`/`departure`/`price_option`/
-`surcharge`/`transport_leg`, **transakcija po ponudi** (jedna loša ponuda ne obara ceo batch
-— `db.transaction()` po ponudi u petlji je već dovoljno, dokazano čitanjem `psycopg_pool`
-izvora, §9). Obavezan **ugovorni test** (ADR 0002): pravi `OfferIn` sa punim sadržajem kroz
-pravi HTTP `POST /internal/ingest/offers`, prava baza, ne mock. **NIJE POČETO — čeka
-korisnikovo "kreni", po istom obrascu kao ceo dosadašnji rad (ne kreće se samostalno).**
-Detaljan spisak šta `OfferWriter` treba da radi je u §7 korak 4 i u Kotlin fajlovima
-navedenim gore (pročitati ih PRE pisanja porta, kao i za sve dosadašnje module).
+**SLEDEĆI KORAK: nije definisan od korisnika.** ADR 0001 korak 4 je gotov u redefinisanom
+obimu. Mogući pravci (NE birati sam — pitati): (a) korak 5 — pravi E2E sa ŽIVIM
+skrepovanjem (traži mrežni pristup koji ova sesija nema — korisnik bi morao da pokrene
+`travelscrape run soleazur-grcka` lokalno, sa `uvicorn travelapi.app:app` upaljenim); (b)
+`search`/`pricing/price_index` (namerno preskočeno u koraku 4); (c) Faza B stavke (§7) —
+kapacitetne kolone, CHECK ograničenja, `fuzzyHit` prefiks nalaz; (d) čišćenje test-podataka
+iz dev baze pre nego što naraste. Vidi §12 za otvoreno pitanje.
 
 **Okruženje spremno za nastavak:** Postgres kontejner gore i zdrav (`docker compose ps`),
 migracije `0001`–`0004` primenjene (`alembic upgrade head` je no-op ako se ponovo pokrene),
-`.venv` u korenu ima sve zavisnosti instalirane. **209 testova (23 preskočeno bez
-`DATABASE_URL`)**, `ruff`/`mypy --strict`/`lint-imports` čisti (3 kept, 0 broken). `git
-status` čist — sve komitovano osim `instrukcije/porukazaclaudecode{7..14}.md`, koji su
-korisnikovi fajlovi, već primenjeni prema §13 istoriji, namerno ne brisani (§2 konvencija).
-Kotlin API i dalje postoji nepromenjen, i dalje JEDINI backend koji stvarno odgovara na HTTP
-zahteve — ne dirati ga, brisanje je korak 6, dolazi tek posle koraka 5 (E2E).)
+`.venv` u korenu ima sve zavisnosti instalirane. **214 testova (23 preskočeno bez
+`DATABASE_URL`)**, `ruff`/`mypy --strict`/`lint-imports` čisti (3 kept, 0 broken) — mypy
+za `apps/api/tests` sada mora uključiti I `travelcore` I `travelscrape` src u istom pozivu
+(§10, zbog `test_soleazur_ingest_integration.py`). `git status` čist osim
+`instrukcije/porukazaclaudecode{7..14}.md` (korisnikovi fajlovi, već primenjeni, namerno
+ne brisani — §2). Kotlin API i dalje postoji nepromenjen, i dalje JEDINI backend koji
+stvarno odgovara na HTTP zahteve — ne dirati ga, brisanje je korak 6, posle koraka 5.)
 Repo: `https://github.com/S-pear-S/kudaputujem` · grana `main`
 
 ---
@@ -461,7 +470,7 @@ svaki se završava zelenim `pytest`-om, Kotlin se briše poslednji.
 | **Jedan `.venv` u korenu** | `apps/scrapers/.venv` i `apps/api/.venv` spojeni u `D:\Kiki\kudaputujem\.venv`, sva tri paketa (`travelcore`, `travelscrape`, `travelapi`) instalirana `-e` u njega | ✓ **commit `18d70cf`** — `pytest.ini` u korenu, `pytest`/`ruff`/`mypy`/`lint-imports` isti rezultati kao pre premeštanja |
 | **2, C3** | `postgres_data` volumen od 15.08 se briše, prava baza se pravi iznova ISKLJUČIVO kroz `alembic`, prava lozinka u `.env` | ✓ **GOTOVO 19.08.2026** — korisnik tražio rezervnu kopiju PRE brisanja (`docker volume rm` prvo blokiran auto-mode klasifikatorom kao destruktivna radnja, korisnik eksplicitno potvrdio). Backup 129KB/2727 linija (van repoa), potvrđeno da nema podataka van geo seed-a (samo `destination`=323, `destination_alias`=541, svih ostalih 17 tabela = 0). Volumen obrisan, baza nastala isključivo kroz `alembic upgrade head`. **164 testa prolaze, 0 preskočeno** (153 + `test_fetch.py` + prošireni karakterizacioni testovi od poruke 5/6). `ref`/`mig` baze nestale zajedno sa obrisanim volumenom (živele su u istom Postgres instance-u) — ništa dodatno za čišćenje |
 | **3** | `OccupancySolverTest.kt` → `tests/test_occupancy.py` (svi crveni), pa `pricing/occupancy.py` dok ne pozelene | ⏳ **SLEDEĆI KORAK** — čeka korisnikovo "kreni" |
-| **4** | **CILJ PROMENJEN (poruka 16, 31.08.2026): jedna prava runda od kraja do kraja, ne ceo API.** `errors` → `db` → `geo` → `accommodation` → `ingest`/`OfferWriter`. `search`/`pricing/price_index` se NE pišu u ovom prolazu (nema pravih ponuda u bazi dok ingest ne proradi) | `errors`/`db`/crawl servis + `V3` migracija (agency/source seed) **GOTOVI**. `geo`/`accommodation` resolveri + `V4` migracija **GOTOVI** — `AccommodationResolver` sa svesnom ispravkom (ADR 0003, §9/§13). Treći `import-linter` kontrakt zelen. **`ingest`/`OfferWriter` SLEDEĆI, nije počeo** — stalo po instrukciji ("javi kad resolveri i V4 budu gotovi, pre OfferWriter-a"), vidi §7 korak 4 |
+| **4** | **CILJ PROMENJEN (poruka 16, 31.08.2026): jedna prava runda od kraja do kraja, ne ceo API.** `errors` → `db` → `geo` → `accommodation` → `ingest`/`OfferWriter`. `search`/`pricing/price_index` se NE pišu u ovom prolazu (nema pravih ponuda u bazi dok ingest ne proradi) | ✓ **GOTOV U CELINI (redefinisan obim), 01.09.2026.** `errors`/`db`/crawl servis + `V3` seed, `geo`/`accommodation` resolveri + `V4` (ADR 0003 svesna ispravka), `ingest`/`OfferWriter` + obavezan ugovorni test (ADR 0002) + prava soleazur fixture kroz pravi ingest. Treći `import-linter` kontrakt zelen. **214 testova.** `search`/`pricing/price_index` namerno nisu pisani. Vidi §7 korak 4, §9 |
 | **5** | E2E provera: `soleazur` skreper → `POST /internal/ingest` → baza → `GET /search` vraća tu ponudu, bez izmene `IngestClient`-a | ne početo |
 | **6** | Brisanje `apps/api/src/main/kotlin`, `src/test/kotlin`, `build.gradle.kts`, `settings.gradle.kts`, `gradle/`, `gradlew*`, JVM `Dockerfile`, čišćenje `docker-compose.yml` | **ne dirati pre koraka 5** |
 | **7** | VS Code config (`.vscode/`), uklanjanje pominjanja IntelliJ/Gradle iz `README.md`/`CLAUDE.md` | ne početo |
@@ -728,10 +737,26 @@ Nije dirano ADR 0001 koracima, gađa isti `/api/search` ugovor bez obzira ko ga 
      pisanja porta privremenim skriptom van repoa), **209 ukupno**, `ruff`/`mypy --strict`/
      `lint-imports` čisti. Drugi nalaz iz istog Kotlin fajla (`fuzzyHit` poredi kanonsko ime
      sa sirovim, fuzzy grana slabo radi) zabeležen za Fazu B, **NIJE popravljen** — §7 Faza B.
-   - **Obavezan ugovorni test, deo ovog koraka, ne opciono:** pravi `OfferIn` sa punim sadržajem
-     mora proći kroz pravi `POST /internal/ingest/offers` i stići u bazu nepromenjen. Ne mock,
-     ne poređenje šema — pravi HTTP zahtev, prava baza. Dosad ovaj lanac **nikad nije proveren
-     od kraja do kraja** (vidi ADR 0002 — `start_run` je radio slučajno, ostatak ugovora nije).
+   - **`ingest`/`OfferWriter` GOTOVI (01.09.2026) — ADR 0001 korak 4 ZAVRŠEN u redefinisanom
+     obimu.** `ingest/writer.py` (prevod `OfferWriter.kt` — upsert ponude, brisanje/ponovni
+     upis termina/cena/doplata/deonica, `refresh_denormalized_columns`, transakcija po
+     ponudi preko `write()`-ovog sopstvenog `db.transaction()` bloka), `ingest/service.py`
+     (prevod `IngestService.kt` — limit batch-a, `completeness_score()` po ponudi već postoji
+     u `travelcore.models.OfferIn`, ne dupliran; poziv `priceIndex.rebuildForOffers(...)`
+     NAMERNO izostaje, `search` nije deo ovog koraka), `ingest/router.py`. **Obavezan
+     ugovorni test iz ADR 0002 napisan i zelen**: `test_ingest_contract.py`, 4 testa — pun
+     `OfferIn` kroz pravi `POST /internal/ingest/offers` stiže u bazu nepromenjen (svako
+     polje provereno upitom, ne samo HTTP 200), isti sadržaj drugi put daje `unchanged`,
+     izmenjena cena daje `updated`, batch preko limita se odbija sa 400, i **loša ponuda u
+     batch-u ne obara ostale** (monkeypatch simulira grešku u bazi za jednu ponudu, provereno
+     upitom da je DRUGA ponuda ostala upisana — transakcija po ponudi dokazana, ne samo
+     dizajnirana). **Dodatno, van tražene liste: prava soleazur fixture stranica (isti HTML
+     koji `test_soleazur.py` koristi, pravi parser) provučena kroz pravi ingest**
+     (`test_soleazur_ingest_integration.py`) — najbliže "soleazur skrepuje, ingest upiše" što
+     je ostvarivo BEZ žive mreže (§4.4/§7 — ova sesija nema izlaz ka `.rs` sajtovima). **214
+     testova ukupno**, `ruff`/`mypy --strict`/`lint-imports` čisti. Nalaz iz ovih testova
+     (`_expire_unseen` cross-test efekat) u §9. `search`/`pricing/price_index` i dalje NISU
+     pisani — bila je namerna granica ovog koraka od početka (§7 header ranije u ovoj tački).
    - **Enumi — puna lista razlika Kotlin/Python, popisano 18–19.08.2026 (poruke 8 i 9, nalaz 2
      iz poruke 9), ne raditi pre koraka 4.** Kompletno prošao ceo `Enums.kt` red po red:
      - **`PricingBasis`** — ✓ rešeno 19.08.2026, `per_night`/`per_unit` su sad `@property` na
@@ -1166,6 +1191,8 @@ dece+8 tipova soba) je redak na stranici od 20 rezultata i cena tog reda ne blok
 | `SourceHealth`/`AliasStatus` dodati u `travelcore.enums` (ADR 0001 korak 4) | informativno | Nedostajali su otkad je popisano u poruci 8/9 (§7 korak 4, "Sistemski nedostatak"). Potrebni za `crawl/service.py` (`SourceHealth` za `source.health_status`) i biće potrebni za `geo`/`accommodation` resolvere (`AliasStatus` za `destination_alias.status`/`accommodation_alias.status`) u sledećem delu. `DestinationKind`/`LeadStatus` i dalje nedostaju — nisu trebali za errors/db/crawl, dodaju se kad zatreba (geo resolver ne čita `destination.kind`). |
 | **`AccommodationResolver.aliasHit` (Kotlin) spaja hotele istog imena preko GRANICE DESTINACIJE — PRVO svesno odstupanje porta od Kotlina, ADR 0003** | ✓ rešeno, 01.09.2026 | Nalaz pri čitanju `AccommodationResolver.kt` red po red pre pisanja Python porta (isti postupak kao za sve module). `aliasHit` traži alias SAMO po `normalized` — "Vila Marija" u Sitoniji i "Vila Marija" u Budvi bi dobili isti `accommodation_id`, cene dva različita hotela bi se tiho spojile. `fuzzyHit`, funkcija odmah ispod u istom fajlu, IMA filter po destinaciji + komentar "bez destinacije ne spajamo, previše rizično" — dokaz da je odsustvo filtera u `aliasHit` previd, ne namera. Za razliku od bug-a u rangiranju dece kod solvera (§9, red "Poznat, NAMERNO neispravljen bug..."), ovde ne postoji nijedan test koji bi ispravkom prestao da važi kao specifikacija — zato je ADR 0003 odlučio da se ispravi u portu, ne prenese. Migracija `V4__accommodation_alias_destination.sql`: `destination_id` kolona + novi `uq_accommodation_alias` indeks svestan destinacije (samo sužavanje SQL upita bez izmene indeksa bi pomerilo kvar sa tihog spajanja na `UniqueViolation`). **Dokazano PRE pisanja porta**: privremeni skript van repoa (`verify_old_bug.py`, obrisan) sa doslovnom kopijom starog Kotlin upita i starog `ON CONFLICT` cilja — isto ime u Budvi (id 47) i Sitoniji (id 71) je dalo `id_budva == id_sitonija == 1`, potvrđujući da bi test bez ispravke pao. Pun tekst obrazloženja: `docs/decisions/0003-accommodation-resolver-destinacija.md`. Drugi nalaz iz istog fajla (`fuzzyHit` poredi kanonsko ime sa sirovim, fuzzy grana slabo radi) NIJE ispravljen — §7 Faza B. |
 | **psycopg 3 `AmbiguousParameter` na `%(x)s IS NULL` kad je `x=None` i nema drugog pojavljivanja koje bi vezalo tip** | rešeno, 01.09.2026, informativno za budući SQL | Otkriveno pri prvom pokretanju `geo/resolver.py`/`accommodation/resolver.py` testova protiv prave baze — `could not determine data type of parameter $2`. Postgres ne može da izvede tip parametra iz same `IS NULL` provere (nema tipizovanog operatora sa druge strane), pa upit puca kad je vrednost `None` i nijedno DRUGO pojavljivanje istog parametra u upitu ne vezuje tip pre te tačke. Rešenje: eksplicitan cast na mestu prve upotrebe (`%(country)s::char(2) IS NULL`, `%(external_id)s::text IS NOT NULL`) — tip mora da se poklopi sa tipom kolone kasnije u istom upitu. Ovo je NOVA varijanta poznatog psycopg 3 `%`-gotcha iz §9 (bukvalni `%` u SQL-u vs. `IS NULL` provera bez tipiziranog konteksta) — različit uzrok, isti pouka: **ne pretpostavljaj da bilo koji "prazan"/"opcion" parametar prolazi kroz psycopg 3 bez eksplicitnog testiranja protiv prave baze.** |
+| **`ingest`/`OfferWriter` port GOTOV (01.09.2026) — ADR 0001 korak 4 zatvoren.** `writer.py` prevodi `OfferWriter.kt` bez odstupanja (brisanje+ponovni upis termina/cena/doplata/deonica, `ON CONFLICT` upsert ponude sa `COALESCE` očuvanjem postojećih `accommodation_id`/`destination_id`/`country_code` pri delimičnom upisu). **Jedna namerna razlika od Kotlina, dokumentovana na mestu**: Python `write()` NE poziva ekvivalent `offer.validate()` — pydantic `@model_validator` na `OfferIn`/`DepartureIn` (`travelcore.models`) već garantuje ista pravila (datum povratka posle polaska, aranžman ima termine/smeštaj) PRI KONSTRUKCIJI, dakle i pri parsiranju HTTP tela u FastAPI-ju; drugi poziv bi bio mrtav kod. Kotlinov `IngestService.completeness()` NIJE dupliran — `OfferIn.completeness_score()` (`travelcore.models`) već postoji i radi isto. `IngestResult` (deljeni ugovor, `travelcore.models`) nema `avgCompleteness`/`dryRun` polja koja Kotlinov API-only DTO ima — ne dodato, jer `IngestClient` na skreper strani te vrednosti nikad ne čita; prosečna popunjenost se loguje (`log.debug`), ne vraća u odgovoru. **Transakcija po ponudi dokazana testom, ne samo dizajnirana**: `test_bad_offer_does_not_roll_back_earlier_offers_in_batch` monkeypatch-uje `writer.write` da baci `psycopg.OperationalError` za JEDNU ponudu u batch-u od dve, pa upitom proverava da je PRVA ponuda ostala upisana a DRUGA nikad nije stigla u bazu. |
+| **`_expire_unseen` cross-test efekat — ponude iz ranijih test-pokretanja se deaktiviraju kad kasniji test pozove `finish(status=OK)` za isti izvor** | informativno, NIJE bug | §4.6 zaštita radi tačno kako treba (deaktivira što nije viđeno u rundi), ali svi integracioni testovi za `soleazur-grcka`/`oktopod-grcka` dele ISTI `source_id` u dev bazi — `finish()` poziv jednog testa deaktivira ponude koje je NEKI RANIJI test kreirao (npr. `test_ingest_contract.py`), jer ih tekuća runda nije "videla". Primećeno pri ručnoj proveri sadržaja `offer` tabele posle pune test serije: stare `contract-*` ponude sa `is_active=false`, nove prave `soleazur` ponude sa `is_active=true`. Nije popravljano — ovo je ISPRAVNO ponašanje sistema nad DELJENOM razvojnom bazom, ne bug u kodu. Vredi imati na umu: dev baza akumulira sintetičke test-ponude (deaktivirane, ali ne obrisane) sa svakim pokretanjem `pytest`-a nad pravom bazom; niko nije pitan da li da se to očisti. |
 
 ---
 
@@ -1193,15 +1220,15 @@ pip install -e "apps/scrapers[dev]"
 pip install -e "apps/api[dev]"
 
 # pytest iz korena — pokuplja apps/scrapers/tests I apps/api/tests (pytest.ini u korenu)
-pytest                        # bez DATABASE_URL: 186 prolazi, 23 preskočeno (test_sql_parity.py + testovi nad bazom u apps/api)
+pytest                        # bez DATABASE_URL: 186 prolazi, 28 preskočeno (test_sql_parity.py + testovi nad bazom u apps/api)
 set DATABASE_URL=postgresql://kudaputujem:<lozinka-iz-.env>@localhost:5432/kudaputujem
-pytest                        # sa bazom: 209 testa, 0 preskočeno (stanje 01.09.2026, raste sa svakim korakom)
+pytest                        # sa bazom: 214 testa, 0 preskočeno (stanje 01.09.2026, raste sa svakim korakom)
 
 # lint/tipovi — i dalje per-paket (svaki ima svoj ruff/mypy config u svom pyproject.toml)
 (cd apps/scrapers && ruff check .)                                          # očekivano: čisto
 (cd apps/api && ruff check migrations src/travelapi)                        # očekivano: čisto (gen_geo_seed.py ima 6 pred-postojecih nalaza, §9, ne diraj uz migracioni posao)
 python -m mypy --strict packages/travelcore/src/travelcore apps/scrapers/src/travelscrape   # očekivano: čisto
-python -m mypy --strict packages/travelcore/src/travelcore apps/api/migrations apps/api/src/travelapi apps/api/tests   # očekivano: čisto (travelcore MORA biti u istom pozivu, nema py.typed marker)
+python -m mypy --strict packages/travelcore/src/travelcore apps/scrapers/src/travelscrape apps/api/migrations apps/api/src/travelapi apps/api/tests   # očekivano: čisto (travelcore MORA biti u istom pozivu, nema py.typed marker; travelscrape isto — test_soleazur_ingest_integration.py ga uvozi)
 
 # provera granice travelcore/travelscrape/travelapi (pravilo 17)
 lint-imports    # pokreni iz root-a repoa, čita .importlinter; očekivano "3 kept, 0 broken"
@@ -1295,7 +1322,15 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
    koje rešenje je "najjeftinije", ne samo brzine; tipičan slučaj ~0.14ms je ono što korisnici
    stvarno pogađaju). ADR 0001 korak 3 zatvoren u celini, §9 poslednji red te teme.
 8. ~~Da li se nastavlja na `ingest`/`OfferWriter`?~~ **Odgovoreno 01.09.2026: korisnik rekao
-   "nastavi sa radom"** — isti signal kao dosadašnje "kreni". Rad na `OfferWriter`-u počeo.
+   "nastavi sa radom"** — isti signal kao dosadašnje "kreni". `OfferWriter` GOTOV isti dan,
+   uz obavezan ugovorni test (ADR 0002) i pravu soleazur fixture kroz pravi ingest.
+9. **ADR 0001 korak 4 je gotov u redefinisanom obimu (01.09.2026). Šta dalje?** Kandidati,
+   nijedan izabran: (a) korak 5 — pravi E2E sa ŽIVIM skrepovanjem, traži da korisnik pokrene
+   `travelscrape run soleazur-grcka` lokalno (ova sesija nema mrežni izlaz ka `.rs`
+   sajtovima); (b) `search`/`pricing/price_index`, namerno preskočeno u koraku 4; (c) Faza B
+   (§7) — kapacitetne kolone, CHECK ograničenja, `fuzzyHit` prefiks nalaz iz ADR 0003; (d)
+   čišćenje sintetičkih test-ponuda iz dev baze (§9, `_expire_unseen` nalaz) pre nego što
+   naraste. **Ne birati sam — pitati korisnika.**
 
 ---
 
@@ -1388,3 +1423,7 @@ Ova pitanja nisu odgovorena i blokiraju odgovarajuće delove:
 | **01.09.2026** | **`content_hash()` determinizam po KONSTRUKCIJI, ne po zapažanju.** `_sort_hash_lists()` u `models.py` sortira termine po `(start_date, end_date)`, cene po `(room_code, slot)`, doplate po `code` — pre serijalizacije, unutar same funkcije. Novi test `test_content_hash_stable_under_list_reordering`: ista ponuda, termini/cene/doplate izmešani, isti heš. Razlog za promenu: "nijedan adapter danas ne gradi listu iz seta" je bilo zapažanje o dva postojeća adaptera, ne garancija za budući kod — ispravljeno na svojstvo funkcije po direktnoj primedbi korisnika |
 | **01.09.2026** | **ADR 0003 — `AccommodationResolver.aliasHit` (Kotlin) spaja hotele istog imena preko granice destinacije, PRVO svesno odstupanje porta od Kotlina.** Nalaz pri čitanju `AccommodationResolver.kt` pre pisanja Python porta: `aliasHit` traži SAMO po `normalized`, `fuzzyHit` odmah ispod IMA filter po destinaciji + komentar "previše rizično" — dokaz previda, ne namere. Migracija `V4__accommodation_alias_destination.sql` (tabela provereno prazna PRE pisanja migracije, upitom): `destination_id` kolona + novi `uq_accommodation_alias` indeks. **Test dokazano PADA na starom ponašanju** — privremeni skript van repoa sa doslovnom kopijom starog Kotlin upita, isto ime u Budvi i Sitoniji dalo isti `accommodation_id`, potvrđeno pre pisanja ispravke. Pun tekst: `docs/decisions/0003-accommodation-resolver-destinacija.md`. Usput otkriven i ispravljen NOV psycopg 3 nalaz (`AmbiguousParameter` na `%(x)s IS NULL` kad `x=None` bez drugog tipizovanog pojavljivanja) — eksplicitan `::cast` na mestu prve upotrebe, §9 |
 | **01.09.2026** | **`geo`/`accommodation` resolveri gotovi, `V4` primenjena — checkpoint po instrukciji, javljeno pre `OfferWriter`-a.** `geo/resolver.py` veran port bez odstupanja. **209 testova ukupno (23 preskočeno bez `DATABASE_URL`)**, `ruff`/`mypy --strict`/`lint-imports` čisti (3 kept, 0 broken) |
+| **01.09.2026** | **Korisnik: "updateuj claude.md kako bi mogao sutra da nastaviš tačno odakle si stao".** Header i §0 TL;DR prepisani (bili zastareli, opisivali stanje pre koraka 3 solvera). §12 pitanje 7 zatvoreno, pitanje 8 dodato. Commit `ca2ce87` |
+| **01.09.2026** | **Korisnik: "nastavi sa radom" — isti signal kao "kreni". `ingest`/`OfferWriter` napisan** — prevod `OfferWriter.kt`/`IngestService.kt`/`IngestController.kt` (ingest deo). Jedna namerna razlika: nema `offer.validate()` poziva (pydantic `@model_validator` već garantuje ista pravila pri konstrukciji, drugi poziv bi bio mrtav kod) — dokumentovano na mestu, ne prećutano. `completeness()` nije duplirana (`OfferIn.completeness_score()` već postoji). `priceIndex.rebuildForOffers(...)` NAMERNO izostaje — `search` nije deo ovog koraka |
+| **01.09.2026** | **Obavezan ugovorni test iz ADR 0002 napisan, `test_ingest_contract.py`, 4 testa** — pun `OfferIn` kroz pravi HTTP stiže u bazu nepromenjen (svako polje provereno upitom), isti sadržaj drugi put daje `unchanged`, izmenjena cena daje `updated`, batch preko limita odbijen sa 400. Peti test dokazuje transakciju po ponudi: monkeypatch simulira grešku u bazi za jednu od dve ponude u batch-u, upitom provereno da je PRVA ostala upisana, DRUGA nikad nije stigla u bazu — nije samo dizajn, provereno eksperimentom |
+| **01.09.2026** | **Dodatno, van tražene liste: prava soleazur fixture stranica kroz pravi ingest** (`test_soleazur_ingest_integration.py`) — isti HTML koji `test_soleazur.py` već koristi, pravi `parse_price_page()`, 7 stvarnih ponuda kroz pravi `POST /internal/ingest/offers`, provereno upitom da su sve upisane i aktivne, ponovan ingest istog fixture-a daje `unchanged` za svih 7. Najbliže "soleazur skrepuje, ingest upiše" što je ostvarivo bez žive mreže (ova sesija nema izlaz ka `.rs` sajtovima). **ADR 0001 korak 4 ZAVRŠEN u redefinisanom obimu. 214 testova ukupno, `ruff`/`mypy --strict`/`lint-imports` čisti.** Nusprodukt: `_expire_unseen` (§4.6 zaštita) deaktivira test-ponude iz ranijih pokretanja koje dele isti `source_id` — ispravno ponašanje, ne bug, ali dev baza akumulira sintetičke ponude; niko nije pitan da li da se očisti (§9, §12 pitanje 9) |
