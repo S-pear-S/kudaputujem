@@ -1,0 +1,83 @@
+# Zamrznuto stanje `.venv`-a u korenu — TACNO ono na cemu je 225 testova zeleno.
+#
+# Zasto zamrznuto a ne ">=" opsezi: prvi pokusaj je lock-ovao `>=` opsege iz tri
+# `pyproject.toml`-a i dobio "sta bi se instaliralo danas", sto se razlikovalo od
+# instaliranog na 36 od 63 paketa — uklj. `selectolax` 1.0.1 naspram 0.4.11, major
+# verziju parsera na kom stoje fixture testovi. Lock koji tvrdi jedno a testiran je
+# drugo nije zapis nego fikcija.
+#
+# Lokalni paketi (travelcore, travelscrape, travelapi) NISU ovde — instaliraju se sa
+# `pip install -e` i nemaju verziju na PyPI-ju. Nacin instalacije se ne menja; ovaj
+# fajl postoji jer kapija pre prvog commita trazi lock fajl, a bez njega "zavisnosti
+# nisu zakacene i to je nalaz, a ne prolaz" (10-kapije-pre-commita.md).
+#
+# Nadogradnja zavisnosti je zaseban posao: podigni `.venv`, pusti pun `pytest`,
+# pa regeneriši ovaj fajl. Ne obrnuto.
+#
+# Regenerisanje (iz korena repoa):
+#   uv pip freeze --python .venv/Scripts/python.exe | grep -v "^-e " > requirements.in
+#   uv pip compile requirements.in --generate-hashes --python-version 3.12 -o requirements.lock
+alembic==1.19.1
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.14.2
+ast-serialize==0.8.0
+certifi==2026.7.22
+click==8.4.2
+colorama==0.4.6
+coverage==7.15.4
+fastapi==0.141.1
+greenlet==3.5.5
+grimp==3.15
+h11==0.16.0
+h2==4.4.1
+hpack==4.2.0
+httpcore==1.0.9
+httptools==0.8.0
+httpx==0.28.1
+hyperframe==6.1.0
+idna==3.19
+import-linter==2.13
+iniconfig==2.3.0
+librt==0.15.0
+mako==1.4.1
+markdown-it-py==4.2.0
+markupsafe==3.0.3
+mdurl==0.1.2
+mypy==2.3.1
+mypy-extensions==1.1.0
+packaging==26.3
+pathspec==1.1.1
+pip==25.0.1
+pluggy==1.6.0
+psycopg==3.3.4
+psycopg-binary==3.3.4
+psycopg-pool==3.3.1
+pydantic==2.13.4
+pydantic-core==2.46.4
+pydantic-settings==2.15.0
+pygments==2.21.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.3
+pyyaml==6.0.3
+rapidfuzz==3.14.5
+respx==0.23.1
+rich==15.0.0
+ruff==0.16.3
+selectolax==0.4.11
+shellingham==1.5.4
+six==1.17.0
+sqlalchemy==2.0.52
+starlette==1.6.0
+structlog==26.1.0
+tenacity==9.1.4
+typer==0.27.1
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+tzdata==2026.3
+uvicorn==0.52.4
+watchfiles==1.2.0
+websockets==17.1

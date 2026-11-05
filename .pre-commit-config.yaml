@@ -1,0 +1,24 @@
+# Druga linija iste kapije (prva je `PreToolUse` hook u .claude/settings.json).
+# Dve su potrebne zato sto pokrivaju razlicite rupe: hook hvata upis agenta ali ne
+# postoji za izmenu koju covek napravi u editoru; `pre-commit` hvata svaki commit
+# ali tek kad je fajl vec na disku.
+#
+# Alat nije instaliran u ovom repou. Instalacija, sa zakacenom verzijom (Z74 je
+# TVRDO, bez izuzetka) — verzija procitana sa PyPI-ja 20.10.2026:
+#   uv pip install --python .venv/Scripts/python.exe pre-commit==4.7.0
+#   .venv/Scripts/pre-commit.exe install
+#
+# `language: system` znaci da `pre-commit` ne pravi sopstveno okruzenje nego zove
+# PowerShell sa masine — isto ponasanje kao Claude Code hook, pa jedna skripta
+# pokriva oba pozivaoca i ne moze da se razidje sa sobom.
+repos:
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks (tajne u radnom stablu)
+        # Bez `-ExecutionPolicy Bypass`: `LocalMachine` je `RemoteSigned`, pa se
+        # lokalna skripta pod verzijom pokrece bez njega (provereno 20.10.2026).
+        entry: powershell -NoProfile -File .githooks/gitleaks-gate.ps1
+        language: system
+        pass_filenames: false
+        always_run: true
